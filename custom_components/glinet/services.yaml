@@ -1,0 +1,18 @@
+connect_wifi:
+  name: Connect to Wi-Fi
+  description: Connect the GL.iNet router's repeater to a Wi-Fi network.
+  fields:
+    ssid:
+      name: SSID
+      description: The Wi-Fi network name to connect to.
+      required: true
+      selector:
+        text:
+    key:
+      name: Password
+      description: The Wi-Fi network password. Leave empty for open or saved networks.
+      required: false
+      default: ""
+      selector:
+        text:
+          type: password

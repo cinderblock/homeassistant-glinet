@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import voluptuous as vol
 
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
@@ -17,6 +19,9 @@ from .coordinator import GlInetCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor", "button", "select"]
+
+CARD_URL = f"/{DOMAIN}/glinet-card.js"
+CARD_PATH = Path(__file__).parent / "www" / "glinet-card.js"
 
 SERVICE_CONNECT_WIFI = "connect_wifi"
 SERVICE_CONNECT_WIFI_SCHEMA = vol.Schema(
@@ -40,6 +45,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
+
+    # Register the Lovelace card JS (once)
+    if CARD_URL not in hass.data.get("frontend_extra_module_url", set()):
+        hass.http.register_static_path(CARD_URL, str(CARD_PATH), cache_headers=False)
+        add_extra_js_url(hass, CARD_URL)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 

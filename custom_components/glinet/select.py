@@ -64,6 +64,25 @@ class GlInetNetworkSelect(CoordinatorEntity[GlInetCoordinator], SelectEntity):
                 return ssid
         return None
 
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose full scan results so the Lovelace card can show signal/band."""
+        networks = []
+        for net in self.coordinator.scan_results:
+            ssid = net.get("ssid", "")
+            if not ssid:
+                continue
+            networks.append(
+                {
+                    "ssid": ssid,
+                    "signal": net.get("signal"),
+                    "band": net.get("band"),
+                    "bssid": net.get("bssid"),
+                    "encryption": net.get("encryption", {}).get("description", ""),
+                }
+            )
+        return {"scan_results": networks}
+
     async def async_select_option(self, option: str) -> None:
         """Connect to the selected network."""
         if option == "(scan first)":
