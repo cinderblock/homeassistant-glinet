@@ -40,11 +40,19 @@ class GlinetRepeaterCard extends HTMLElement {
 
   // --- Helpers ---
 
+  _bandLabel(raw) {
+    if (!raw) return raw;
+    const s = raw.toLowerCase();
+    if (s === '2g' || s === '2.4g') return '2.4 GHz';
+    if (s === '5g') return '5 GHz';
+    return raw;
+  }
+
   _bandPills(raw) {
     if (!raw) return "";
     return raw.split(/\s*\/\s*/).map(p => {
-      if (p === "2g") return '<span class="pill pill-2g">2.4G</span>';
-      if (p === "5g") return '<span class="pill pill-5g">5G</span>';
+      if (p === "2g") return '<span class="pill pill-2g">2.4 GHz</span>';
+      if (p === "5g") return '<span class="pill pill-5g">5 GHz</span>';
       return `<span class="pill">${this._esc(p)}</span>`;
     }).join(" ");
   }
@@ -305,7 +313,7 @@ class GlinetRepeaterCard extends HTMLElement {
               <div class="client-row">
                 ${this._dot(true, false)}
                 <span class="client-name">${this._esc(cl.name || 'Unknown')}</span>
-                <span class="pill ${cl.iface === '5G' ? 'pill-5g' : 'pill-2g'}">${this._esc(cl.iface || '?')}</span>
+                <span class="pill ${cl.iface === '5G' ? 'pill-5g' : 'pill-2g'}">${this._esc(this._bandLabel(cl.iface) || '?')}</span>
                 <span class="client-detail">${this._esc(cl.ip || '')}</span>
               </div>
             `).join('') : ''}
@@ -352,14 +360,14 @@ class GlinetRepeaterCard extends HTMLElement {
             <div class="section-label">Wi-Fi Radios</div>
             ${mainRadios.map(r => `
               <div class="radio-row">
-                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
+                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(this._bandLabel(r.band))}</span>
                 <span class="radio-ssid">${this._esc(r.ssid)}</span>
                 ${r.hidden ? '<span style="font-size:0.75em;color:var(--secondary-text-color)">hidden</span>' : ''}
               </div>
             `).join('')}
             ${guestRadios.map(r => `
               <div class="radio-row">
-                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
+                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(this._bandLabel(r.band))}</span>
                 <span class="radio-ssid">${this._esc(r.ssid)}</span>
                 <span style="font-size:0.75em;color:var(--secondary-text-color)">guest</span>
               </div>
