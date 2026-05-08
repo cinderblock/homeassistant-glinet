@@ -225,9 +225,30 @@ class GlInetCoordinator(DataUpdateCoordinator):
 - **The `connect` API hasn't been fully tested live** (we avoided disrupting the active connection). The params format is based on what the web UI sends. Test carefully.
 - **`passlib` must be in `manifest.json` requirements** — HA will pip-install it automatically.
 - **All API calls are synchronous** (urllib). Wrap them in `async_add_executor_job()` in the HA integration. Don't try to rewrite the API client with aiohttp — the challenge-response timing is tight and simpler with synchronous urllib.
+- **`register_static_path` no longer exists** in modern HA — use `await hass.http.async_register_static_paths([StaticPathConfig(...)])` from `homeassistant.components.http`. Fixed in commit f4cf9ce.
+- **`frontend_extra_module_url` is a `UrlManager`, not a set** — don't use `in` operator. Use `hass.data.get(f"{DOMAIN}_card_registered")` flag. Fixed in commit ecb26ff.
+- **Custom card JS must be loaded as `js` type, not `module`** when registered as a Lovelace resource. The `add_extra_js_url` call alone is not sufficient for user-created dashboards. Register via `lovelace/resources/create` with `res_type: 'js'`.
+
+## Findings / Progress Log
+
+- [x] All integration files written and committed
+- [x] Pushed to GitHub under `cinderblock/homeassistant-glinet`
+- [x] Added to HACS, downloaded, configured with router at 172.16.17.1
+- [x] Fixed `register_static_path` → `async_register_static_paths` (commit f4cf9ce)
+- [x] Fixed `UrlManager` not-iterable error (commit ecb26ff)
+- [x] Integration loads successfully — all 5 entities created:
+  - `sensor.gl_inet_router_172_16_17_1_repeater_ssid` → "Tom Sawyer Labs"
+  - `sensor.gl_inet_router_172_16_17_1_repeater_signal` → "-65 dBm"
+  - `button.gl_inet_router_172_16_17_1_scan_wi_fi` → working
+  - `button.gl_inet_router_172_16_17_1_disconnect_wi_fi` → working
+  - `select.gl_inet_router_172_16_17_1_repeater_network` → "Tom Sawyer Labs"
+- [x] Wi-Fi scan working — returns 20+ APs across 2g/5g bands
+- [x] Custom Lovelace card rendering on "Network" dashboard with scan results, signal, bands, Join buttons, and Manual Connect form
+- [x] Card JS resource registered as `js` type in Lovelace resources
+- [x] Created "Network" dashboard with panel view showing the card
 
 ## Open Questions
 
-1. How to handle `connect` when the target network needs a password the router doesn't have saved? The service call accepts a `key` field, but a nice Lovelace card experience might need a custom card or an input_text helper.
+1. ~~How to handle `connect` when the target network needs a password the router doesn't have saved?~~ **Resolved**: The `glinet.connect_wifi` service accepts a `key` field, and the custom Lovelace card has a Manual Connect form with SSID and password inputs.
 2. Should we expose the cellular/modem status too, or keep scope to repeater only for v1?
-3. What's the HA custom_components path on the instance at 172.16.17.162? Typically `/config/custom_components/` but could vary.
+3. ~~What's the HA custom_components path on the instance at 172.16.17.162?~~ **Resolved**: `/config/custom_components/` — HACS handles this automatically.
