@@ -1,0 +1,10 @@
+{
+  "domain": "glinet",
+  "name": "GL.iNet Router",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/camerontacklind/homeassistant-glinet",
+  "iot_class": "local_polling",
+  "requirements": ["passlib>=1.7.4"],
+  "version": "0.1.0"
+}

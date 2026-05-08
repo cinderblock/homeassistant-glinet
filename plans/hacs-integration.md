@@ -8,7 +8,7 @@ The router in question is a **GL-XE3000** (Puli AX) running firmware **v4.0**, b
 
 ## Environment / Context
 
-- **Router IP**: 192.168.8.1 (configurable)
+- **Router IP**: 172.16.17.1 (configurable; was 192.168.8.1 earlier)
 - **Home Assistant instance**: 172.16.17.162
 - **Router admin credentials**: root / Pasword222
 - **Working directory**: `C:\Users\camer\git\Personal Projects\homeassistant-glinet`
@@ -17,7 +17,7 @@ The router in question is a **GL-XE3000** (Puli AX) running firmware **v4.0**, b
 
 ## GL.iNet 4.x JSON-RPC API Reference
 
-All calls go to `POST http://<router_ip>/rpc` with `Content-Type: application/json`.
+All calls go to `POST http://<router_ip>/rpc` with `Content-Type: application/json`. Current router IP is **172.16.17.1**.
 
 ### Authentication (challenge-response)
 
@@ -193,7 +193,7 @@ class GlInetCoordinator(DataUpdateCoordinator):
 
 ## Config Flow Design
 
-**Step 1 (user):** Form with fields: host (default 192.168.8.1), password (required). Username is always "root" (can be hidden or shown as advanced).
+**Step 1 (user):** Form with fields: host (default 172.16.17.1), password (required). Username is always "root" (can be hidden or shown as advanced).
 
 **Validation:** Attempt a login during config flow. If it fails, show the error. If it succeeds, create the config entry.
 

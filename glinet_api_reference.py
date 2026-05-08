@@ -11,7 +11,7 @@ from passlib.hash import sha256_crypt
 
 
 class GlInetApi:
-    def __init__(self, host="192.168.8.1", username="root", password=""):
+    def __init__(self, host="172.16.17.1", username="root", password=""):
         self.base_url = f"http://{host}/rpc"
         self.username = username
         self.password = password
