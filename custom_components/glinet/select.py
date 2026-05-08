@@ -57,9 +57,9 @@ class GlInetNetworkSelect(CoordinatorEntity[GlInetCoordinator], SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return the currently connected SSID."""
-        saved = self.coordinator.data.get("saved", [])
-        if saved:
-            ssid = saved[0].get("ssid")
+        rs = self.coordinator.data.get("repeater_status", {})
+        if rs.get("running") and rs.get("ssid"):
+            ssid = rs["ssid"]
             if ssid in self.options:
                 return ssid
         return None
@@ -108,7 +108,36 @@ class GlInetNetworkSelect(CoordinatorEntity[GlInetCoordinator], SelectEntity):
                     "encryption": entry["encryption"],
                 }
             )
-        return {"scan_results": networks}
+        # Repeater connection details
+        rs = self.coordinator.data.get("repeater_status", {})
+        ipv4 = rs.get("ipv4", {}) if rs.get("running") else {}
+        repeater_info = {
+            "ip_address": ipv4.get("ip"),
+            "gateway": ipv4.get("gateway"),
+            "dns": ipv4.get("dns"),
+            "macaddr": rs.get("macaddr"),
+            "bssid": rs.get("bssid"),
+            "channel": rs.get("channel"),
+            "connected": rs.get("connected"),
+        } if rs.get("running") else {}
+
+        # WAN interface statuses from system status
+        sys_status = self.coordinator.data.get("system_status", {})
+        wan_interfaces = []
+        for iface in sys_status.get("network", []):
+            wan_interfaces.append({
+                "interface": iface.get("interface"),
+                "up": iface.get("up"),
+                "online": iface.get("online"),
+            })
+        lan_ip = sys_status.get("system", {}).get("lan_ip")
+
+        return {
+            "scan_results": networks,
+            "repeater_info": repeater_info,
+            "wan_interfaces": wan_interfaces,
+            "lan_ip": lan_ip,
+        }
 
     async def async_select_option(self, option: str) -> None:
         """Connect to the selected network."""

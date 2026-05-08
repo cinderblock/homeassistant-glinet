@@ -138,6 +138,10 @@ class GlInetApi:
         """Remove a saved Wi-Fi network."""
         return self.call("repeater", "remove_saved_ap", {"ssid": ssid})
 
+    def repeater_get_status(self) -> dict:
+        """Get repeater connection status (IP, MAC, signal, SSID, etc.)."""
+        return self.call("repeater", "get_status")
+
     # --- System Methods ---
 
     def system_get_status(self) -> dict:

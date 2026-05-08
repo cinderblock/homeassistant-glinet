@@ -43,22 +43,28 @@ class GlInetRepeaterSsidSensor(CoordinatorEntity[GlInetCoordinator], SensorEntit
     @property
     def native_value(self) -> str | None:
         """Return the SSID of the connected network, or 'Disconnected'."""
-        saved = self.coordinator.data.get("saved", [])
-        if saved:
-            return saved[0].get("ssid")
+        rs = self.coordinator.data.get("repeater_status", {})
+        if rs.get("running") and rs.get("ssid"):
+            return rs["ssid"]
         return "Disconnected"
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Return extra attributes about the connection."""
-        saved = self.coordinator.data.get("saved", [])
-        if not saved:
+        """Return connection details from repeater status."""
+        rs = self.coordinator.data.get("repeater_status", {})
+        if not rs.get("running"):
             return {}
-        current = saved[0]
-        return {
-            "protocol": current.get("protocol"),
-            "auto_portal": current.get("auto_portal"),
+        ipv4 = rs.get("ipv4", {})
+        attrs = {
+            "ip_address": ipv4.get("ip"),
+            "gateway": ipv4.get("gateway"),
+            "dns": ipv4.get("dns"),
+            "macaddr": rs.get("macaddr"),
+            "bssid": rs.get("bssid"),
+            "channel": rs.get("channel"),
+            "connected": rs.get("connected"),
         }
+        return {k: v for k, v in attrs.items() if v is not None}
 
 
 class GlInetRepeaterSignalSensor(CoordinatorEntity[GlInetCoordinator], SensorEntity):
@@ -76,15 +82,10 @@ class GlInetRepeaterSignalSensor(CoordinatorEntity[GlInetCoordinator], SensorEnt
 
     @property
     def native_value(self) -> int | None:
-        """Return signal strength from the most recent scan matching the connected SSID."""
-        saved = self.coordinator.data.get("saved", [])
-        if not saved:
-            return None
-        connected_ssid = saved[0].get("ssid")
-        # Look for this SSID in scan results
-        for net in self.coordinator.scan_results:
-            if net.get("ssid") == connected_ssid:
-                return net.get("signal")
+        """Return signal strength from repeater status (live, not scan-based)."""
+        rs = self.coordinator.data.get("repeater_status", {})
+        if rs.get("running"):
+            return rs.get("signal")
         return None
 
 

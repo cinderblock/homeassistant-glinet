@@ -154,8 +154,11 @@ class GlinetRepeaterCard extends HTMLElement {
     const isConnected = connectedSsid && connectedSsid !== "Disconnected" && connectedSsid !== "unknown";
     const signalDbm = signalState && signalState.state !== "unknown" ? signalState.state + " dBm" : "";
 
-    // Scan results from select entity attributes
+    // Data from select entity attributes
     const scanResults = selectState?.attributes?.scan_results || [];
+    const repeaterInfo = selectState?.attributes?.repeater_info || {};
+    const wanInterfaces = selectState?.attributes?.wan_interfaces || [];
+    const lanIp = selectState?.attributes?.lan_ip || "";
 
     // Apply band filter
     const filteredResults = scanResults
@@ -431,6 +434,46 @@ class GlinetRepeaterCard extends HTMLElement {
           justify-content: flex-end;
           padding-top: 4px;
         }
+        .info-grid {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 2px 12px;
+          font-size: 0.82em;
+          margin-top: 6px;
+        }
+        .info-grid .label {
+          color: var(--secondary-text-color);
+        }
+        .info-grid .value {
+          font-family: monospace;
+          font-size: 0.95em;
+        }
+        .section-title {
+          font-size: 0.8em;
+          color: var(--secondary-text-color);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin: 12px 0 6px;
+        }
+        .wan-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 12px;
+          font-size: 0.85em;
+        }
+        .wan-dot {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .wan-dot.online { background: var(--success-color, #4caf50); }
+        .wan-dot.up { background: var(--warning-color, #ff9800); }
+        .wan-dot.down { background: var(--disabled-text-color, #555); }
+        .wan-label {
+          color: var(--secondary-text-color);
+        }
         .empty-state {
           text-align: center;
           padding: 16px;
@@ -448,7 +491,16 @@ class GlinetRepeaterCard extends HTMLElement {
             ${isConnected
               ? `<span class="connected-badge">Connected</span>
                  <span class="ssid-name">${this._esc(connectedSsid)}</span>
-                 ${signalDbm ? `<span class="signal-info">${signalDbm}</span>` : ""}`
+                 ${signalDbm ? `<span class="signal-info">${signalDbm}</span>` : ""}
+                 ${Object.keys(repeaterInfo).length > 0 ? `
+                   <div class="info-grid">
+                     ${repeaterInfo.ip_address ? `<span class="label">IP</span><span class="value">${this._esc(repeaterInfo.ip_address)}</span>` : ''}
+                     ${repeaterInfo.macaddr ? `<span class="label">MAC</span><span class="value">${this._esc(repeaterInfo.macaddr)}</span>` : ''}
+                     ${repeaterInfo.gateway ? `<span class="label">Gateway</span><span class="value">${this._esc(repeaterInfo.gateway)}</span>` : ''}
+                     ${repeaterInfo.connected ? `<span class="label">Uptime</span><span class="value">${this._esc(repeaterInfo.connected)}</span>` : ''}
+                     ${repeaterInfo.channel ? `<span class="label">Channel</span><span class="value">${repeaterInfo.channel}</span>` : ''}
+                   </div>
+                 ` : ''}`
               : `<span class="disconnected-badge">Disconnected</span>
                  <span class="ssid-name">No network</span>`
             }
@@ -458,6 +510,16 @@ class GlinetRepeaterCard extends HTMLElement {
             : ""
           }
         </div>
+
+        ${lanIp || wanInterfaces.some(i => i.up) ? `
+          <div class="section-title">Interfaces</div>
+          ${lanIp ? `<div class="wan-row"><span class="wan-dot online"></span><span>LAN</span><span class="wan-label">${this._esc(lanIp)}</span></div>` : ''}
+          ${wanInterfaces.filter(i => i.interface !== 'wwan' && i.interface !== 'wwan6').map(i => {
+            const dotCls = i.online ? 'online' : i.up ? 'up' : 'down';
+            const label = i.online ? 'online' : i.up ? 'up' : 'down';
+            return i.up || i.online ? `<div class="wan-row"><span class="wan-dot ${dotCls}"></span><span>${this._esc(i.interface)}</span><span class="wan-label">${label}</span></div>` : '';
+          }).join('')}
+        ` : ''}
 
         <div class="actions">
           <button class="btn btn-primary" id="btn-scan" ${this._scanning ? "disabled" : ""}>

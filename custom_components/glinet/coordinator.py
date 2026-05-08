@@ -44,7 +44,14 @@ class GlInetCoordinator(DataUpdateCoordinator):
         """Synchronous fetch — runs in executor."""
         config = self.api.repeater_get_config()
         saved = self.api.repeater_saved_networks()
-        return {"config": config, "saved": saved}
+        repeater_status = self.api.repeater_get_status()
+        system_status = self.api.system_get_status()
+        return {
+            "config": config,
+            "saved": saved,
+            "repeater_status": repeater_status,
+            "system_status": system_status,
+        }
 
     async def async_scan_networks(self) -> list[dict]:
         """Trigger a Wi-Fi scan (called by the scan button). Takes 5-10 seconds."""
