@@ -66,19 +66,46 @@ class GlInetNetworkSelect(CoordinatorEntity[GlInetCoordinator], SelectEntity):
 
     @property
     def extra_state_attributes(self) -> dict:
-        """Expose full scan results so the Lovelace card can show signal/band."""
-        networks = []
+        """Expose deduplicated scan results for the Lovelace card.
+
+        Multiple BSSIDs for the same SSID+encryption are collapsed into one
+        entry with the best signal and a combined band list (e.g. "2g / 5g").
+        """
+        grouped: dict[tuple[str, str], dict] = {}
         for net in self.coordinator.scan_results:
             ssid = net.get("ssid", "")
             if not ssid:
                 continue
+            encryption = net.get("encryption", {}).get("description", "")
+            key = (ssid, encryption)
+            signal = net.get("signal")
+            band = net.get("band", "")
+
+            if key not in grouped:
+                grouped[key] = {
+                    "ssid": ssid,
+                    "signal": signal,
+                    "bands": {band} if band else set(),
+                    "encryption": encryption,
+                }
+            else:
+                entry = grouped[key]
+                if signal is not None and (
+                    entry["signal"] is None or signal > entry["signal"]
+                ):
+                    entry["signal"] = signal
+                if band:
+                    entry["bands"].add(band)
+
+        networks = []
+        for entry in grouped.values():
+            bands = sorted(entry["bands"])
             networks.append(
                 {
-                    "ssid": ssid,
-                    "signal": net.get("signal"),
-                    "band": net.get("band"),
-                    "bssid": net.get("bssid"),
-                    "encryption": net.get("encryption", {}).get("description", ""),
+                    "ssid": entry["ssid"],
+                    "signal": entry["signal"],
+                    "band": " / ".join(bands) if bands else None,
+                    "encryption": entry["encryption"],
                 }
             )
         return {"scan_results": networks}

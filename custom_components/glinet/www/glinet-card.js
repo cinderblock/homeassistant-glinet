@@ -13,6 +13,7 @@ class GlinetRepeaterCard extends HTMLElement {
     this._manualKey = "";
     this._scanning = false;
     this._connecting = false;
+    this._bandFilter = null; // null = all, "2g", "5g"
   }
 
   setConfig(config) {
@@ -38,6 +39,34 @@ class GlinetRepeaterCard extends HTMLElement {
 
   static getStubConfig() {
     return {};
+  }
+
+  // --- Helpers ---
+
+  _bandLabel(raw) {
+    if (!raw) return "";
+    const parts = raw.split(/\s*\/\s*/);
+    return parts.map(p => {
+      if (p === "2g") return "2.4 GHz";
+      if (p === "5g") return "5 GHz";
+      return p;
+    }).join(" / ");
+  }
+
+  _bandPills(raw) {
+    if (!raw) return "";
+    const parts = raw.split(/\s*\/\s*/);
+    return parts.map(p => {
+      if (p === "2g") return '<span class="band-pill band-2g">2.4 GHz</span>';
+      if (p === "5g") return '<span class="band-pill band-5g">5 GHz</span>';
+      return `<span class="band-pill">${this._esc(p)}</span>`;
+    }).join(" ");
+  }
+
+  _matchesBandFilter(bandStr) {
+    if (!this._bandFilter) return true;
+    if (!bandStr) return true;
+    return bandStr.includes(this._bandFilter);
   }
 
   // --- Actions ---
@@ -103,6 +132,11 @@ class GlinetRepeaterCard extends HTMLElement {
     this._render();
   }
 
+  _setBandFilter(band) {
+    this._bandFilter = band;
+    this._render();
+  }
+
   // --- Render ---
 
   _render() {
@@ -123,6 +157,11 @@ class GlinetRepeaterCard extends HTMLElement {
     // Scan results from select entity attributes
     const scanResults = selectState?.attributes?.scan_results || [];
 
+    // Apply band filter
+    const filteredResults = scanResults
+      .filter(net => this._matchesBandFilter(net.band))
+      .sort((a, b) => (b.signal || -100) - (a.signal || -100));
+
     // Signal icon helper
     const signalIcon = (dbm) => {
       if (dbm == null) return "\u25CB"; // empty circle
@@ -131,6 +170,8 @@ class GlinetRepeaterCard extends HTMLElement {
       if (dbm >= -70) return "\u2588\u2588\u2591\u2591";
       return "\u2588\u2591\u2591\u2591";
     };
+
+    const bf = this._bandFilter;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -222,12 +263,42 @@ class GlinetRepeaterCard extends HTMLElement {
         .scan-results {
           margin-bottom: 12px;
         }
-        .scan-results h3 {
-          margin: 0 0 8px;
+        .scan-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+        }
+        .scan-header h3 {
+          margin: 0;
           font-size: 0.9em;
           color: var(--secondary-text-color);
           text-transform: uppercase;
           letter-spacing: 0.5px;
+        }
+        .band-filter {
+          display: flex;
+          gap: 4px;
+        }
+        .band-filter .btn-filter {
+          border: 1px solid var(--divider-color);
+          border-radius: 12px;
+          padding: 2px 10px;
+          cursor: pointer;
+          font-size: 0.75em;
+          font-family: inherit;
+          background: transparent;
+          color: var(--secondary-text-color);
+          transition: all 0.15s;
+        }
+        .band-filter .btn-filter:hover {
+          border-color: var(--primary-color);
+          color: var(--primary-color);
+        }
+        .band-filter .btn-filter.active {
+          background: var(--primary-color);
+          border-color: var(--primary-color);
+          color: var(--text-primary-color, #fff);
         }
         .network-list {
           display: flex;
@@ -261,6 +332,27 @@ class GlinetRepeaterCard extends HTMLElement {
         .network-meta {
           font-size: 0.75em;
           color: var(--secondary-text-color);
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-wrap: wrap;
+        }
+        .band-pill {
+          display: inline-block;
+          padding: 1px 7px;
+          border-radius: 9px;
+          font-size: 0.85em;
+          font-weight: 500;
+          letter-spacing: 0.2px;
+          line-height: 1.4;
+        }
+        .band-2g {
+          background: rgba(33, 150, 243, 0.15);
+          color: #1976d2;
+        }
+        .band-5g {
+          background: rgba(156, 39, 176, 0.15);
+          color: #7b1fa2;
         }
         .manual-section {
           border-top: 1px solid var(--divider-color);
@@ -360,18 +452,24 @@ class GlinetRepeaterCard extends HTMLElement {
 
         ${scanResults.length > 0 ? `
           <div class="scan-results">
-            <h3>Available Networks</h3>
+            <div class="scan-header">
+              <h3>Available Networks</h3>
+              <div class="band-filter">
+                <button class="btn-filter ${bf === null ? 'active' : ''}" data-band="all">All</button>
+                <button class="btn-filter ${bf === '2g' ? 'active' : ''}" data-band="2g">2.4 GHz</button>
+                <button class="btn-filter ${bf === '5g' ? 'active' : ''}" data-band="5g">5 GHz</button>
+              </div>
+            </div>
             <div class="network-list">
-              ${scanResults
-                .sort((a, b) => (b.signal || -100) - (a.signal || -100))
+              ${filteredResults
                 .map(net => `
                   <div class="network-item ${net.ssid === connectedSsid ? 'current' : ''}">
                     <div class="network-info">
                       <span class="network-ssid">${this._esc(net.ssid)}</span>
                       <span class="network-meta">
-                        ${signalIcon(net.signal)} ${net.signal != null ? net.signal + ' dBm' : ''}
-                        &middot; ${net.band || '?'}
-                        ${net.encryption ? ' &middot; ' + this._esc(net.encryption) : ''}
+                        <span>${signalIcon(net.signal)} ${net.signal != null ? net.signal + ' dBm' : ''}</span>
+                        ${this._bandPills(net.band) || '<span>?</span>'}
+                        ${net.encryption ? '<span>' + this._esc(net.encryption) + '</span>' : ''}
                       </span>
                     </div>
                     ${net.ssid !== connectedSsid
@@ -428,11 +526,18 @@ class GlinetRepeaterCard extends HTMLElement {
     const btnManualToggle = this.shadowRoot.getElementById("btn-manual-toggle");
     if (btnManualToggle) btnManualToggle.addEventListener("click", () => this._toggleManual());
 
+    // Band filter buttons
+    this.shadowRoot.querySelectorAll(".btn-filter").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const band = btn.dataset.band;
+        this._setBandFilter(band === "all" ? null : band);
+      });
+    });
+
     // Manual form inputs
     const ssidInput = this.shadowRoot.getElementById("manual-ssid");
     if (ssidInput) {
       ssidInput.addEventListener("input", (e) => { this._manualSsid = e.target.value; });
-      // Focus the input after render if form just opened
       ssidInput.focus();
     }
 
@@ -467,7 +572,9 @@ class GlinetRepeaterCard extends HTMLElement {
   }
 }
 
-customElements.define("glinet-repeater-card", GlinetRepeaterCard);
+if (!customElements.get("glinet-repeater-card")) {
+  customElements.define("glinet-repeater-card", GlinetRepeaterCard);
+}
 
 window.customCards = window.customCards || [];
 window.customCards.push({
