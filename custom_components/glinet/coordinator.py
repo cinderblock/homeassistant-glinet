@@ -48,6 +48,13 @@ class GlInetCoordinator(DataUpdateCoordinator):
         system_status = self.api.system_get_status()
         clients = self.api.clients_get_list()
 
+        # VPN client status (best-effort)
+        vpn_client_status: dict = {}
+        try:
+            vpn_client_status = self.api.vpn_client_get_status()
+        except Exception:  # noqa: BLE001
+            pass
+
         # Cellular modem (best-effort — not all routers have one)
         modem_status: dict = {}
         modem_info: dict = {}
@@ -68,6 +75,7 @@ class GlInetCoordinator(DataUpdateCoordinator):
             "repeater_status": repeater_status,
             "system_status": system_status,
             "clients": clients,
+            "vpn_client_status": vpn_client_status,
             "modem_status": modem_status,
             "modem_info": modem_info,
             "modem_config": modem_config,

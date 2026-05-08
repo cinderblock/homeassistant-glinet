@@ -170,6 +170,24 @@ class GlInetNetworkSelect(CoordinatorEntity[GlInetCoordinator], SelectEntity):
             for s in services
         ]
 
+        # VPN client tunnels (WireGuard/OpenVPN)
+        vpn_client_raw = self.coordinator.data.get("vpn_client_status", {})
+        vpn_tunnels = [
+            {
+                "name": t.get("name", ""),
+                "type": t.get("type", ""),
+                "enabled": t.get("enabled", False),
+                "connected": t.get("status", 0) != 0,
+                "ipv4": t.get("ipv4"),
+                "peer_name": t.get("peer_name"),
+                "domain": t.get("domain", []),
+                "port": t.get("port"),
+                "tx_bytes": t.get("tx_bytes"),
+                "rx_bytes": t.get("rx_bytes"),
+            }
+            for t in vpn_client_raw.get("status_list", [])
+        ]
+
         # Wi-Fi radios
         wifi_radios = [
             {
@@ -209,6 +227,7 @@ class GlInetNetworkSelect(CoordinatorEntity[GlInetCoordinator], SelectEntity):
             "client_summary": client_summary,
             "modem_info": modem_info,
             "vpn_services": vpn_services,
+            "vpn_tunnels": vpn_tunnels,
             "wifi_radios": wifi_radios,
             "system_stats": system_stats,
         }

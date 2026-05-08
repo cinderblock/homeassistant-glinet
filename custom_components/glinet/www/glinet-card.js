@@ -156,6 +156,7 @@ class GlinetRepeaterCard extends HTMLElement {
     const clientSummary = a.client_summary || {};
     const modem = a.modem_info || {};
     const vpn = a.vpn_services || [];
+    const vpnTunnels = a.vpn_tunnels || [];
     const radios = a.wifi_radios || [];
     const sys = a.system_stats || {};
 
@@ -227,7 +228,7 @@ class GlinetRepeaterCard extends HTMLElement {
         .service-badges { display: flex; flex-wrap: wrap; gap: 4px; }
 
         /* System stats bar */
-        .sys-bar { display: flex; align-items: center; gap: 16px; font-size: 0.82em; color: var(--secondary-text-color); padding: 8px 0 0; flex-wrap: wrap; }
+        .sys-bar { display: flex; align-items: center; gap: 16px; font-size: 0.82em; color: var(--secondary-text-color); padding: 0 0 12px; flex-wrap: wrap; }
         .sys-stat { display: flex; align-items: center; gap: 4px; }
         .sys-stat .val { color: var(--primary-text-color); font-weight: 500; }
 
@@ -247,9 +248,12 @@ class GlinetRepeaterCard extends HTMLElement {
         .band-filter .btn-filter:hover { border-color: var(--primary-color); color: var(--primary-color); }
         .band-filter .btn-filter.active { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
         .network-list { display: flex; flex-direction: column; gap: 3px; }
-        .network-item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px; background: var(--card-background-color, var(--ha-card-background, #1c1c1c)); }
-        .network-item.current { border-left: 3px solid var(--primary-color); }
-        .network-ssid { font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+        .network-item { display: grid; grid-template-columns: auto 1fr auto auto auto auto; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px; background: var(--card-background-color, var(--ha-card-background, #1c1c1c)); }
+        .network-item.current { background: rgba(var(--rgb-primary-color, 33, 150, 243), 0.08); }
+        .network-ssid { font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .network-bands { white-space: nowrap; display: flex; gap: 3px; }
+        .network-enc { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; text-align: right; }
+        .network-dbm { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; text-align: right; font-family: monospace; }
         .network-detail { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; display: flex; align-items: center; gap: 4px; }
 
         /* Wi-Fi signal bars */
@@ -275,7 +279,16 @@ class GlinetRepeaterCard extends HTMLElement {
         .empty-state { text-align: center; padding: 12px; color: var(--secondary-text-color); font-size: 0.85em; }
       </style>
       <ha-card>
-        <!-- WAN Sources + Repeater Status -->
+        <!-- System Stats Bar -->
+        <div class="sys-bar">
+          ${sys.cpu_temp != null ? `<span class="sys-stat">CPU <span class="val">${sys.cpu_temp}&deg;C</span></span>` : ''}
+          ${sys.battery_percent != null ? `<span class="sys-stat">${sys.battery_charging ? '&#9889;' : '&#128267;'} <span class="val">${sys.battery_percent}%</span></span>` : ''}
+          ${sys.memory_total ? `<span class="sys-stat">RAM <span class="val">${this._formatBytes(sys.memory_free)}</span> free</span>` : ''}
+          ${sys.uptime ? `<span class="sys-stat">Up <span class="val">${this._formatUptime(sys.uptime)}</span></span>` : ''}
+          ${sys.lan_ip ? `<span class="sys-stat">LAN <span class="val">${this._esc(sys.lan_ip)}</span></span>` : ''}
+        </div>
+
+        <!-- WAN Sources + Connected Clients -->
         <div class="grid">
           <div class="card-section">
             <div class="section-label">WAN Sources</div>
@@ -308,6 +321,53 @@ class GlinetRepeaterCard extends HTMLElement {
           </div>
         </div>
 
+        <!-- Services + Wi-Fi Radios -->
+        <div class="grid">
+          <div class="card-section">
+            <div class="section-label">Services</div>
+            <div class="service-badges">
+              ${vpnTunnels.map(t => `<span class="pill ${t.connected ? 'pill-on' : 'pill-off'}">${this._esc(t.type)}${t.connected ? ' &#10003;' : ''}</span>`).join('')}
+              ${vpn.map(s => `<span class="pill ${s.active ? 'pill-on' : 'pill-off'}">${this._esc(s.name)}</span>`).join('')}
+            </div>
+            ${vpnTunnels.filter(t => t.connected).map(t => `
+              <div class="info-grid" style="margin-top:6px">
+                ${t.name ? `<span class="label">Tunnel</span><span class="value">${this._esc(t.name)}</span>` : ''}
+                ${t.ipv4 ? `<span class="label">IP</span><span class="value">${this._esc(t.ipv4)}</span>` : ''}
+                ${t.domain && t.domain.length ? `<span class="label">Endpoint</span><span class="value">${this._esc(t.domain[0])}${t.port ? ':' + t.port : ''}</span>` : ''}
+                ${t.tx_bytes ? `<span class="label">TX / RX</span><span class="value">${this._formatBytes(t.tx_bytes)} / ${this._formatBytes(t.rx_bytes)}</span>` : ''}
+              </div>
+            `).join('')}
+            ${modem.model ? `
+              <div class="section-label" style="margin-top:10px">Cellular</div>
+              <div class="info-grid">
+                ${modem.apn ? `<span class="label">APN</span><span class="value">${this._esc(modem.apn)}</span>` : ''}
+                ${modem.traffic_bytes ? `<span class="label">Traffic</span><span class="value">${this._formatBytes(modem.traffic_bytes)}</span>` : ''}
+                ${modem.sms_unread ? `<span class="label">SMS</span><span class="value">${modem.sms_unread} unread</span>` : ''}
+                ${modem.imei ? `<span class="label">IMEI</span><span class="value">${this._esc(modem.imei)}</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
+
+          <div class="card-section">
+            <div class="section-label">Wi-Fi Radios</div>
+            ${mainRadios.map(r => `
+              <div class="radio-row">
+                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
+                <span class="radio-ssid">${this._esc(r.ssid)}</span>
+                ${r.hidden ? '<span style="font-size:0.75em;color:var(--secondary-text-color)">hidden</span>' : ''}
+              </div>
+            `).join('')}
+            ${guestRadios.map(r => `
+              <div class="radio-row">
+                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
+                <span class="radio-ssid">${this._esc(r.ssid)}</span>
+                <span style="font-size:0.75em;color:var(--secondary-text-color)">guest</span>
+              </div>
+            `).join('')}
+            ${mainRadios.length === 0 && guestRadios.length === 0 ? '<div class="empty-state">No radios active</div>' : ''}
+          </div>
+        </div>
+
         <!-- Repeater Connection Details (when connected) -->
         ${isConnected ? `
         <div class="card-section" style="margin-bottom:12px">
@@ -332,53 +392,6 @@ class GlinetRepeaterCard extends HTMLElement {
         </div>
         ` : ''}
 
-        <!-- Wi-Fi Radios + Services -->
-        <div class="grid">
-          <div class="card-section">
-            <div class="section-label">Wi-Fi Radios</div>
-            ${mainRadios.map(r => `
-              <div class="radio-row">
-                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
-                <span class="radio-ssid">${this._esc(r.ssid)}</span>
-                ${r.hidden ? '<span style="font-size:0.75em;color:var(--secondary-text-color)">hidden</span>' : ''}
-              </div>
-            `).join('')}
-            ${guestRadios.map(r => `
-              <div class="radio-row">
-                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
-                <span class="radio-ssid">${this._esc(r.ssid)}</span>
-                <span style="font-size:0.75em;color:var(--secondary-text-color)">guest</span>
-              </div>
-            `).join('')}
-            ${mainRadios.length === 0 && guestRadios.length === 0 ? '<div class="empty-state">No radios active</div>' : ''}
-          </div>
-
-          <div class="card-section">
-            <div class="section-label">Services</div>
-            <div class="service-badges">
-              ${vpn.map(s => `<span class="pill ${s.active ? 'pill-on' : 'pill-off'}">${this._esc(s.name)}</span>`).join('')}
-            </div>
-            ${modem.model ? `
-              <div class="section-label" style="margin-top:10px">Cellular</div>
-              <div class="info-grid">
-                ${modem.apn ? `<span class="label">APN</span><span class="value">${this._esc(modem.apn)}</span>` : ''}
-                ${modem.traffic_bytes ? `<span class="label">Traffic</span><span class="value">${this._formatBytes(modem.traffic_bytes)}</span>` : ''}
-                ${modem.sms_unread ? `<span class="label">SMS</span><span class="value">${modem.sms_unread} unread</span>` : ''}
-                ${modem.imei ? `<span class="label">IMEI</span><span class="value">${this._esc(modem.imei)}</span>` : ''}
-              </div>
-            ` : ''}
-          </div>
-        </div>
-
-        <!-- System stats bar -->
-        <div class="sys-bar">
-          ${sys.cpu_temp != null ? `<span class="sys-stat">CPU <span class="val">${sys.cpu_temp}&deg;C</span></span>` : ''}
-          ${sys.battery_percent != null ? `<span class="sys-stat">${sys.battery_charging ? '&#9889;' : '&#128267;'} <span class="val">${sys.battery_percent}%</span></span>` : ''}
-          ${sys.memory_total ? `<span class="sys-stat">RAM <span class="val">${this._formatBytes(sys.memory_free)}</span> free</span>` : ''}
-          ${sys.uptime ? `<span class="sys-stat">Up <span class="val">${this._formatUptime(sys.uptime)}</span></span>` : ''}
-          ${sys.lan_ip ? `<span class="sys-stat">LAN <span class="val">${this._esc(sys.lan_ip)}</span></span>` : ''}
-        </div>
-
         <!-- Scan / Network Picker -->
         <div style="margin-top:14px">
           <div class="scan-toggle">
@@ -400,14 +413,12 @@ class GlinetRepeaterCard extends HTMLElement {
                 <div class="network-item ${net.ssid === connectedSsid ? 'current' : ''}">
                   ${this._signalBars(net.signal)}
                   <span class="network-ssid">${this._esc(net.ssid)}</span>
-                  <span class="network-detail">
-                    ${this._bandPills(net.band)}
-                    ${net.encryption ? '<span>' + this._esc(net.encryption) + '</span>' : ''}
-                    ${net.signal != null ? '<span>' + net.signal + ' dBm</span>' : ''}
-                  </span>
+                  <span class="network-bands">${this._bandPills(net.band)}</span>
+                  <span class="network-enc">${net.encryption ? this._esc(net.encryption) : ''}</span>
+                  <span class="network-dbm">${net.signal != null ? net.signal + ' dBm' : ''}</span>
                   ${net.ssid !== connectedSsid
                     ? `<button class="btn btn-outline btn-small btn-join" data-ssid="${this._esc(net.ssid)}" ${this._connecting ? 'disabled' : ''}>Join</button>`
-                    : '<span class="network-detail">current</span>'}
+                    : '<button class="btn btn-outline btn-small" disabled>Current</button>'}
                 </div>
               `).join("")}
             </div>

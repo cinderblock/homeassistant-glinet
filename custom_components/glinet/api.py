@@ -172,6 +172,10 @@ class GlInetApi:
 
     # --- VPN / Service Methods ---
 
+    def vpn_client_get_status(self) -> dict:
+        """Get VPN client status (WireGuard/OpenVPN tunnels)."""
+        return self.call("vpn-client", "get_status")
+
     def tailscale_get_config(self) -> dict:
         """Get Tailscale VPN configuration."""
         return self.call("tailscale", "get_config")
