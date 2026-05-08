@@ -221,13 +221,16 @@ class GlInetCoordinator(DataUpdateCoordinator):
 - **Auth hash is SHA-256**, not MD5. Some online docs are wrong. Do not change this.
 - **Nonce expires in ~2 seconds.** Challenge + hash + login must be a single fast burst. Don't add any I/O between them.
 - **Don't spam login attempts.** The router rate-limits after ~5 failures and locks out for up to 600 seconds. Re-auth only on token expiry (-32000 error), not proactively.
-- **Scan takes 5-10 seconds.** Don't put it in the coordinator's regular poll — make it a manual trigger (button entity). The coordinator should only poll lightweight status.
+- **Scan takes 5-10 seconds.** Don't put it in the coordinator's regular poll — make it a manual trigger (button entity). The coordinator polls `repeater.get_status` + `system.get_status` (lightweight).
 - **The `connect` API hasn't been fully tested live** (we avoided disrupting the active connection). The params format is based on what the web UI sends. Test carefully.
 - **`passlib` must be in `manifest.json` requirements** — HA will pip-install it automatically.
 - **All API calls are synchronous** (urllib). Wrap them in `async_add_executor_job()` in the HA integration. Don't try to rewrite the API client with aiohttp — the challenge-response timing is tight and simpler with synchronous urllib.
 - **`register_static_path` no longer exists** in modern HA — use `await hass.http.async_register_static_paths([StaticPathConfig(...)])` from `homeassistant.components.http`. Fixed in commit f4cf9ce.
 - **`frontend_extra_module_url` is a `UrlManager`, not a set** — don't use `in` operator. Use `hass.data.get(f"{DOMAIN}_card_registered")` flag. Fixed in commit ecb26ff.
 - **Custom card JS must be loaded as `js` type, not `module`** when registered as a Lovelace resource. The `add_extra_js_url` call alone is not sufficient for user-created dashboards. Register via `lovelace/resources/create` with `res_type: 'js'`.
+- **Browser caches card JS aggressively** — after HACS update + HA restart, a hard page reload (Ctrl+Shift+R) is needed to pick up new JS. Hot-patching the prototype via JS injection works momentarily but HA's `set hass()` re-renders from the originally loaded class.
+- **`repeater.get_status`** returns rich live data: IP (with CIDR), MAC, gateway, DNS, BSSID, signal, SSID, channel, connected time, state. Much better than deriving status from saved networks list.
+- **`system.get_status`** returns network interface up/online states, LAN IP, Wi-Fi AP config, CPU temp, memory, battery (MCU), uptime. Interface list includes wan, wwan, tethering, modem, secondwan (and IPv6 variants).
 
 ## Findings / Progress Log
 
@@ -246,9 +249,24 @@ class GlInetCoordinator(DataUpdateCoordinator):
 - [x] Custom Lovelace card rendering on "Network" dashboard with scan results, signal, bands, Join buttons, and Manual Connect form
 - [x] Card JS resource registered as `js` type in Lovelace resources
 - [x] Created "Network" dashboard with panel view showing the card
+- [x] Deduplicate scan results — collapse same SSID+encryption, combine bands (commit 069a106)
+- [x] Colored band pills (blue 2.4 GHz, purple 5 GHz) + band filter in scan results header
+- [x] Condensed network list to single-line rows (commit 24ef9e4)
+- [x] CSS Wi-Fi strength bars replacing block-character signal indicators
+- [x] Removed "GL.iNet Repeater" title bar
+- [x] Added `repeater.get_status` and `system.get_status` to coordinator poll — live IP, MAC, gateway, uptime, channel, signal (commit 802e714)
+- [x] Status section now shows IP address, MAC, gateway, uptime, channel
+- [x] Active WAN interfaces displayed with status dots (online/up/down)
+- [x] Signal sensor now uses live `repeater_status` instead of scan-result matching
+- [x] Full network overview dashboard: WAN sources, connected clients, Wi-Fi radios, services, cellular, system stats (commit b7bc39b)
+- [x] Layout rearranged: sys stats bar → top, Services (left) ↔ Wi-Fi Radios (right), repeater details below grids (commit ddc6d48)
+- [x] VPN client status via `vpn-client.get_status` API — shows WireGuard/OpenVPN tunnel name, IP, endpoint, TX/RX (commit ddc6d48)
+- [x] Scan list uses grid columns for aligned data; current network shown as disabled "Current" button (commit ddc6d48)
+- [x] Band labels use "2.4 GHz" / "5 GHz" format throughout (commit 31dc9d0)
+- **HACS Python caching**: supervisor container restart (`/homeassistant/restart` via supervisor API) is more reliable than `homeassistant/restart` for picking up Python file changes. `homeassistant/restart` alone may not clear bytecache on HA OS installations.
 
 ## Open Questions
 
 1. ~~How to handle `connect` when the target network needs a password the router doesn't have saved?~~ **Resolved**: The `glinet.connect_wifi` service accepts a `key` field, and the custom Lovelace card has a Manual Connect form with SSID and password inputs.
-2. Should we expose the cellular/modem status too, or keep scope to repeater only for v1?
+2. ~~Should we expose the cellular/modem status too, or keep scope to repeater only for v1?~~ **Resolved**: Full dashboard now includes cellular modem stats (APN, traffic, SMS count, IMEI) and VPN client tunnels.
 3. ~~What's the HA custom_components path on the instance at 172.16.17.162?~~ **Resolved**: `/config/custom_components/` — HACS handles this automatically.
