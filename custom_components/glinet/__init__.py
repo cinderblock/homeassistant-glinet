@@ -8,6 +8,7 @@ from pathlib import Path
 import voluptuous as vol
 
 from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
@@ -48,7 +49,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Register the Lovelace card JS (once)
     if not hass.data.get(f"{DOMAIN}_card_registered"):
-        hass.http.register_static_path(CARD_URL, str(CARD_PATH), cache_headers=False)
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(CARD_URL, str(CARD_PATH), cache_headers=False)]
+        )
         add_extra_js_url(hass, CARD_URL)
         hass.data[f"{DOMAIN}_card_registered"] = True
 
