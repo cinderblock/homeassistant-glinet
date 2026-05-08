@@ -251,15 +251,18 @@ class GlinetRepeaterCard extends HTMLElement {
 
         /* Scan section */
         .scan-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-        .band-filter { display: flex; gap: 4px; margin-left: auto; }
-        .band-filter .btn-filter { border: 1px solid var(--divider-color); border-radius: 12px; padding: 2px 10px; cursor: pointer; font-size: 0.72em; font-family: inherit; background: transparent; color: var(--secondary-text-color); transition: all 0.15s; }
+        .band-filter { display: flex; gap: 8px; margin-left: auto; margin-right: 190px; }
+        .band-filter .btn-filter { border: 1px solid var(--divider-color); border-radius: 12px; padding: 2px 0; cursor: pointer; font-size: 0.72em; font-family: inherit; background: transparent; color: var(--secondary-text-color); transition: all 0.15s; text-align: center; box-sizing: border-box; }
+        .band-filter .btn-filter[data-band="all"] { min-width: 36px; }
+        .band-filter .btn-filter[data-band="2g"] { min-width: 60px; }
+        .band-filter .btn-filter[data-band="5g"] { min-width: 48px; }
         .band-filter .btn-filter:hover { border-color: var(--primary-color); color: var(--primary-color); }
         .band-filter .btn-filter.active { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
         .network-list { display: flex; flex-direction: column; gap: 3px; }
-        .network-item { display: grid; grid-template-columns: auto 1fr 120px 36px 60px 62px; align-items: center; gap: 0 8px; padding: 5px 10px; border-radius: 6px; background: var(--card-background-color, var(--ha-card-background, #1c1c1c)); }
+        .network-item { display: grid; grid-template-columns: auto 1fr 60px 48px 36px 58px 62px; align-items: center; gap: 0 8px; padding: 5px 10px; border-radius: 6px; background: var(--card-background-color, var(--ha-card-background, #1c1c1c)); }
         .network-item.current { background: rgba(var(--rgb-primary-color, 33, 150, 243), 0.08); }
         .network-ssid { font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-        .network-bands { white-space: nowrap; display: flex; gap: 3px; justify-content: flex-end; }
+        .network-band-24, .network-band-5 { text-align: center; }
         .network-enc { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; text-align: right; }
         .network-dbm { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; text-align: right; font-family: monospace; }
         .network-item .btn { min-width: 62px; text-align: center; box-sizing: border-box; }
@@ -422,7 +425,8 @@ class GlinetRepeaterCard extends HTMLElement {
                 <div class="network-item ${net.ssid === connectedSsid ? 'current' : ''}">
                   ${this._signalBars(net.signal)}
                   <span class="network-ssid">${this._esc(net.ssid)}</span>
-                  <span class="network-bands">${this._bandPills(net.band)}</span>
+                  <span class="network-band-24">${net.band && net.band.includes('2g') ? '<span class="pill pill-2g">2.4 GHz</span>' : ''}</span>
+                  <span class="network-band-5">${net.band && net.band.includes('5g') ? '<span class="pill pill-5g">5 GHz</span>' : ''}</span>
                   <span class="network-enc">${net.encryption ? this._esc(net.encryption) : ''}</span>
                   <span class="network-dbm">${net.signal != null ? net.signal + ' dBm' : ''}</span>
                   ${net.ssid !== connectedSsid
