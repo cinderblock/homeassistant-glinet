@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import socket
+import struct
 from typing import Any
 
 import voluptuous as vol
@@ -13,6 +15,18 @@ from .api import GlInetApi, GlInetApiError
 from .const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _detect_gateway() -> str | None:
+    """Detect the default gateway IP from the Linux routing table."""
+    try:
+        with open("/proc/net/route") as f:
+            for line in f:
+                fields = line.strip().split()
+                if len(fields) >= 3 and fields[1] == "00000000":
+                    return socket.inet_ntoa(struct.pack("<L", int(fields[2], 16)))
+    except Exception:  # noqa: BLE001
+        return None
 
 
 class GlInetConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -45,7 +59,6 @@ class GlInetConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected error during GL.iNet login")
                 errors["base"] = "unknown"
             else:
-                # Use host as unique ID (could use MAC from system status later)
                 await self.async_set_unique_id(host)
                 self._abort_if_unique_id_configured()
 
@@ -58,11 +71,13 @@ class GlInetConfigFlow(ConfigFlow, domain=DOMAIN):
                     },
                 )
 
+        suggested_host = await self.hass.async_add_executor_job(_detect_gateway)
+
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOST, default=DEFAULT_HOST): str,
+                    vol.Required(CONF_HOST, default=suggested_host or DEFAULT_HOST): str,
                     vol.Required(CONF_PASSWORD): str,
                 }
             ),
