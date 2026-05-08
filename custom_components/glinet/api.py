@@ -142,6 +142,40 @@ class GlInetApi:
         """Get repeater connection status (IP, MAC, signal, SSID, etc.)."""
         return self.call("repeater", "get_status")
 
+    # --- Client Methods ---
+
+    def clients_get_list(self) -> list[dict]:
+        """Get list of connected clients (Wi-Fi and wired)."""
+        result = self.call("clients", "get_list")
+        return result.get("clients", [])
+
+    # --- Modem (Cellular) Methods ---
+
+    def modem_get_status(self) -> dict:
+        """Get modem status (traffic, SIM, SMS count)."""
+        return self.call("modem", "get_status")
+
+    def modem_get_info(self) -> dict:
+        """Get modem hardware info (model, IMEI, firmware)."""
+        return self.call("modem", "get_info")
+
+    def modem_get_config(self, bus: str = "") -> dict:
+        """Get modem config (APN, bands, protocol)."""
+        params = {"bus": bus} if bus else {}
+        return self.call("modem", "get_config", params)
+
+    def modem_get_sms_list(self, bus: str = "") -> list[dict]:
+        """Get SMS messages from the modem."""
+        params = {"bus": bus} if bus else {}
+        result = self.call("modem", "get_sms_list", params)
+        return result.get("list", [])
+
+    # --- VPN / Service Methods ---
+
+    def tailscale_get_config(self) -> dict:
+        """Get Tailscale VPN configuration."""
+        return self.call("tailscale", "get_config")
+
     # --- System Methods ---
 
     def system_get_status(self) -> dict:

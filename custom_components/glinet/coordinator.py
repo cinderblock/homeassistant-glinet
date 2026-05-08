@@ -46,11 +46,31 @@ class GlInetCoordinator(DataUpdateCoordinator):
         saved = self.api.repeater_saved_networks()
         repeater_status = self.api.repeater_get_status()
         system_status = self.api.system_get_status()
+        clients = self.api.clients_get_list()
+
+        # Cellular modem (best-effort — not all routers have one)
+        modem_status: dict = {}
+        modem_info: dict = {}
+        modem_config: dict = {}
+        try:
+            modem_status = self.api.modem_get_status()
+            modem_info = self.api.modem_get_info()
+            modems = modem_status.get("modems", [])
+            bus = modems[0].get("bus", "") if modems else ""
+            if bus:
+                modem_config = self.api.modem_get_config(bus)
+        except Exception:  # noqa: BLE001
+            pass
+
         return {
             "config": config,
             "saved": saved,
             "repeater_status": repeater_status,
             "system_status": system_status,
+            "clients": clients,
+            "modem_status": modem_status,
+            "modem_info": modem_info,
+            "modem_config": modem_config,
         }
 
     async def async_scan_networks(self) -> list[dict]:

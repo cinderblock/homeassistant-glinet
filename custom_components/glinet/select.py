@@ -132,11 +132,85 @@ class GlInetNetworkSelect(CoordinatorEntity[GlInetCoordinator], SelectEntity):
             })
         lan_ip = sys_status.get("system", {}).get("lan_ip")
 
+        # Connected clients
+        clients_raw = self.coordinator.data.get("clients", [])
+        clients = [
+            {
+                "name": c.get("alias") or c.get("name", ""),
+                "ip": c.get("ip"),
+                "mac": c.get("mac"),
+                "iface": c.get("iface"),
+                "online": c.get("online"),
+            }
+            for c in clients_raw
+        ]
+
+        # Cellular modem
+        modem_status = self.coordinator.data.get("modem_status", {})
+        modem_info_raw = self.coordinator.data.get("modem_info", {})
+        modem_config = self.coordinator.data.get("modem_config", {})
+        modems = modem_status.get("modems", [])
+        modem_hw = modem_info_raw.get("modems", [{}])[0] if modem_info_raw.get("modems") else {}
+        modem_info = {}
+        if modem_hw:
+            modem_info = {
+                "model": modem_hw.get("name"),
+                "imei": modem_hw.get("imei"),
+                "firmware": modem_hw.get("version"),
+                "apn": modem_config.get("apn"),
+                "traffic_bytes": int(modems[0]["network"]["traffic_total"]) if modems and modems[0].get("network", {}).get("traffic_total") else None,
+                "sms_unread": modem_status.get("new_sms_count"),
+                "sim": modems[0].get("current_sim") if modems else None,
+            }
+
+        # VPN / services
+        services = sys_status.get("service", [])
+        vpn_services = [
+            {"name": s.get("name"), "active": s.get("status") != 0}
+            for s in services
+        ]
+
+        # Wi-Fi radios
+        wifi_radios = [
+            {
+                "band": w.get("band"),
+                "ssid": w.get("ssid"),
+                "up": w.get("up"),
+                "guest": w.get("guest"),
+                "hidden": w.get("hidden"),
+                "name": w.get("name"),
+            }
+            for w in sys_status.get("wifi", [])
+        ]
+
+        # System stats
+        sys_info = sys_status.get("system", {})
+        mcu = sys_info.get("mcu", {})
+        system_stats = {
+            "cpu_temp": sys_info.get("cpu", {}).get("temperature"),
+            "battery_percent": mcu.get("charge_percent"),
+            "battery_charging": mcu.get("charging_status", 0) != 0,
+            "memory_total": sys_info.get("memory_total"),
+            "memory_free": sys_info.get("memory_free"),
+            "uptime": sys_info.get("uptime"),
+            "lan_ip": sys_info.get("lan_ip"),
+            "lan_netmask": sys_info.get("lan_netmask"),
+        }
+
+        # Client summary from system status
+        client_summary = sys_status.get("client", [{}])[0] if sys_status.get("client") else {}
+
         return {
             "scan_results": networks,
             "repeater_info": repeater_info,
             "wan_interfaces": wan_interfaces,
             "lan_ip": lan_ip,
+            "clients": clients,
+            "client_summary": client_summary,
+            "modem_info": modem_info,
+            "vpn_services": vpn_services,
+            "wifi_radios": wifi_radios,
+            "system_stats": system_stats,
         }
 
     async def async_select_option(self, option: str) -> None:

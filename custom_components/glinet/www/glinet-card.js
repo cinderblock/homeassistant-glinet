@@ -1,7 +1,8 @@
 /**
- * GL.iNet Repeater Card — custom Lovelace card for the glinet integration.
+ * GL.iNet Network Overview Card — custom Lovelace card for the glinet integration.
  *
- * Shows current connection, scan results, and a manual-connect form.
+ * Full network dashboard: WAN sources, repeater status, connected clients,
+ * Wi-Fi radios, services, cellular modem, and system stats.
  */
 
 class GlinetRepeaterCard extends HTMLElement {
@@ -13,7 +14,8 @@ class GlinetRepeaterCard extends HTMLElement {
     this._manualKey = "";
     this._scanning = false;
     this._connecting = false;
-    this._bandFilter = null; // null = all, "2g", "5g"
+    this._bandFilter = null;
+    this._scanOpen = false;
   }
 
   setConfig(config) {
@@ -33,33 +35,17 @@ class GlinetRepeaterCard extends HTMLElement {
     this._render();
   }
 
-  getCardSize() {
-    return 4;
-  }
-
-  static getStubConfig() {
-    return {};
-  }
+  getCardSize() { return 6; }
+  static getStubConfig() { return {}; }
 
   // --- Helpers ---
 
-  _bandLabel(raw) {
-    if (!raw) return "";
-    const parts = raw.split(/\s*\/\s*/);
-    return parts.map(p => {
-      if (p === "2g") return "2.4 GHz";
-      if (p === "5g") return "5 GHz";
-      return p;
-    }).join(" / ");
-  }
-
   _bandPills(raw) {
     if (!raw) return "";
-    const parts = raw.split(/\s*\/\s*/);
-    return parts.map(p => {
-      if (p === "2g") return '<span class="band-pill band-2g">2.4 GHz</span>';
-      if (p === "5g") return '<span class="band-pill band-5g">5 GHz</span>';
-      return `<span class="band-pill">${this._esc(p)}</span>`;
+    return raw.split(/\s*\/\s*/).map(p => {
+      if (p === "2g") return '<span class="pill pill-2g">2.4G</span>';
+      if (p === "5g") return '<span class="pill pill-5g">5G</span>';
+      return `<span class="pill">${this._esc(p)}</span>`;
     }).join(" ");
   }
 
@@ -69,21 +55,54 @@ class GlinetRepeaterCard extends HTMLElement {
     return bandStr.includes(this._bandFilter);
   }
 
+  _signalBars(dbm) {
+    let level, cls;
+    if (dbm == null) { level = 0; cls = "sig-none"; }
+    else if (dbm >= -50) { level = 4; cls = "sig-4"; }
+    else if (dbm >= -60) { level = 3; cls = "sig-3"; }
+    else if (dbm >= -70) { level = 2; cls = "sig-2"; }
+    else { level = 1; cls = "sig-1"; }
+    return `<span class="wifi-icon ${cls}" title="${dbm != null ? dbm + ' dBm' : 'unknown'}">` +
+      [1,2,3,4].map(i => `<span class="wifi-bar b${i} ${level >= i ? 'on' : ''}"></span>`).join("") +
+      `</span>`;
+  }
+
+  _formatBytes(bytes) {
+    if (bytes == null) return "—";
+    const b = Number(bytes);
+    if (b < 1024) return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
+    return (b / 1073741824).toFixed(2) + " GB";
+  }
+
+  _formatUptime(sec) {
+    if (sec == null) return "—";
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  _dot(online, up) {
+    if (online) return '<span class="dot online"></span>';
+    if (up) return '<span class="dot up"></span>';
+    return '<span class="dot down"></span>';
+  }
+
   // --- Actions ---
 
   _pressScan() {
     if (!this._hass || !this._config.scan_button) return;
     this._scanning = true;
+    this._scanOpen = true;
     this._render();
     this._hass.callService("button", "press", {
       entity_id: this._config.scan_button,
-    }).then(() => {
-      this._scanning = false;
-      this._render();
-    }).catch(() => {
-      this._scanning = false;
-      this._render();
-    });
+    }).then(() => { this._scanning = false; this._render(); })
+      .catch(() => { this._scanning = false; this._render(); });
   }
 
   _pressDisconnect() {
@@ -95,549 +114,336 @@ class GlinetRepeaterCard extends HTMLElement {
 
   _connectTo(ssid, key) {
     if (!this._hass) return;
-    this._connecting = true;
-    this._render();
-    this._hass.callService("glinet", "connect_wifi", {
-      ssid,
-      key: key || "",
-    }).then(() => {
-      this._connecting = false;
-      this._manualSsid = "";
-      this._manualKey = "";
-      this._render();
-    }).catch(() => {
-      this._connecting = false;
-      this._render();
-    });
+    this._connecting = true; this._render();
+    this._hass.callService("glinet", "connect_wifi", { ssid, key: key || "" })
+      .then(() => { this._connecting = false; this._manualSsid = ""; this._manualKey = ""; this._render(); })
+      .catch(() => { this._connecting = false; this._render(); });
   }
 
   _joinScanned(ssid) {
     if (!this._hass || !this._config.network_select) return;
-    this._connecting = true;
-    this._render();
+    this._connecting = true; this._render();
     this._hass.callService("select", "select_option", {
-      entity_id: this._config.network_select,
-      option: ssid,
-    }).then(() => {
-      this._connecting = false;
-      this._render();
-    }).catch(() => {
-      this._connecting = false;
-      this._render();
-    });
+      entity_id: this._config.network_select, option: ssid,
+    }).then(() => { this._connecting = false; this._render(); })
+      .catch(() => { this._connecting = false; this._render(); });
   }
 
-  _toggleManual() {
-    this._manualOpen = !this._manualOpen;
-    this._render();
-  }
-
-  _setBandFilter(band) {
-    this._bandFilter = band;
-    this._render();
-  }
+  _toggleManual() { this._manualOpen = !this._manualOpen; this._render(); }
+  _toggleScan() { this._scanOpen = !this._scanOpen; this._render(); }
+  _setBandFilter(band) { this._bandFilter = band; this._render(); }
 
   // --- Render ---
 
   _render() {
     if (!this._hass || !this._config) return;
+    const c = this._config, h = this._hass;
 
-    const c = this._config;
-    const h = this._hass;
-
-    // Read entity states
     const ssidState = c.ssid_sensor ? h.states[c.ssid_sensor] : null;
     const signalState = c.signal_sensor ? h.states[c.signal_sensor] : null;
     const selectState = c.network_select ? h.states[c.network_select] : null;
 
     const connectedSsid = ssidState ? ssidState.state : "Unknown";
     const isConnected = connectedSsid && connectedSsid !== "Disconnected" && connectedSsid !== "unknown";
-    const signalDbm = signalState && signalState.state !== "unknown" ? signalState.state + " dBm" : "";
+    const signalDbm = signalState && signalState.state !== "unknown" ? Number(signalState.state) : null;
 
-    // Data from select entity attributes
-    const scanResults = selectState?.attributes?.scan_results || [];
-    const repeaterInfo = selectState?.attributes?.repeater_info || {};
-    const wanInterfaces = selectState?.attributes?.wan_interfaces || [];
-    const lanIp = selectState?.attributes?.lan_ip || "";
-
-    // Apply band filter
-    const filteredResults = scanResults
-      .filter(net => this._matchesBandFilter(net.band))
-      .sort((a, b) => (b.signal || -100) - (a.signal || -100));
-
-    // Signal icon helper — CSS-based Wi-Fi bars (4 arcs)
-    const signalIcon = (dbm) => {
-      let level, cls;
-      if (dbm == null) { level = 0; cls = "sig-none"; }
-      else if (dbm >= -50) { level = 4; cls = "sig-4"; }
-      else if (dbm >= -60) { level = 3; cls = "sig-3"; }
-      else if (dbm >= -70) { level = 2; cls = "sig-2"; }
-      else { level = 1; cls = "sig-1"; }
-      return `<span class="wifi-icon ${cls}" title="${dbm != null ? dbm + ' dBm' : 'unknown'}">` +
-        `<span class="wifi-bar b1 ${level >= 1 ? 'on' : ''}"></span>` +
-        `<span class="wifi-bar b2 ${level >= 2 ? 'on' : ''}"></span>` +
-        `<span class="wifi-bar b3 ${level >= 3 ? 'on' : ''}"></span>` +
-        `<span class="wifi-bar b4 ${level >= 4 ? 'on' : ''}"></span>` +
-        `</span>`;
-    };
+    // All data from select entity attributes
+    const a = selectState?.attributes || {};
+    const scanResults = a.scan_results || [];
+    const ri = a.repeater_info || {};
+    const wanIfaces = a.wan_interfaces || [];
+    const clients = a.clients || [];
+    const clientSummary = a.client_summary || {};
+    const modem = a.modem_info || {};
+    const vpn = a.vpn_services || [];
+    const radios = a.wifi_radios || [];
+    const sys = a.system_stats || {};
 
     const bf = this._bandFilter;
+    const filteredResults = scanResults.filter(n => this._matchesBandFilter(n.band)).sort((a, b) => (b.signal || -100) - (a.signal || -100));
+
+    // Classify WAN sources
+    const wwan = wanIfaces.find(i => i.interface === "wwan");
+    const wan = wanIfaces.find(i => i.interface === "wan");
+    const secondwan = wanIfaces.find(i => i.interface === "secondwan");
+    const tethering = wanIfaces.find(i => i.interface === "tethering");
+    const modem0 = wanIfaces.find(i => i.interface === "modem_0001");
+
+    // Online clients
+    const onlineClients = clients.filter(c => c.online);
+    const wlanClients = onlineClients.filter(c => c.iface !== "cable");
+    const lanClients = onlineClients.filter(c => c.iface === "cable");
+
+    // Active radios (non-guest, up)
+    const mainRadios = radios.filter(r => !r.guest && r.up);
+    const guestRadios = radios.filter(r => r.guest && r.up);
+
+    // Active services
+    const activeVpn = vpn.filter(s => s.active);
 
     this.shadowRoot.innerHTML = `
       <style>
-        :host {
-          display: block;
-        }
-        ha-card {
-          padding: 16px;
-        }
-        .header {
-          display: none;
-        }
-        .status {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 12px;
-          border-radius: 8px;
-          background: var(--primary-background-color);
-          margin-bottom: 12px;
-        }
-        .status-left {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        .ssid-name {
-          font-size: 1.05em;
-          font-weight: 500;
-        }
-        .signal-info {
-          font-size: 0.85em;
-          color: var(--secondary-text-color);
-        }
-        .connected-badge {
-          font-size: 0.75em;
-          color: var(--success-color, #4caf50);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        .disconnected-badge {
-          font-size: 0.75em;
-          color: var(--warning-color, #ff9800);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        .actions {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 12px;
-        }
-        .btn {
-          border: none;
-          border-radius: 8px;
-          padding: 8px 16px;
-          cursor: pointer;
-          font-size: 0.9em;
-          font-family: inherit;
-          transition: opacity 0.2s;
-        }
+        :host { display: block; }
+        ha-card { padding: 16px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+        .card-section { background: var(--primary-background-color); border-radius: 8px; padding: 12px; }
+        .section-label { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.6px; color: var(--secondary-text-color); margin-bottom: 8px; }
+        .full-width { grid-column: 1 / -1; }
+
+        /* Status dots */
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .dot.online { background: var(--success-color, #4caf50); }
+        .dot.up { background: var(--warning-color, #ff9800); }
+        .dot.down { background: var(--disabled-text-color, #555); }
+
+        /* WAN source rows */
+        .wan-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 0.88em; }
+        .wan-label { min-width: 70px; font-weight: 500; }
+        .wan-detail { color: var(--secondary-text-color); font-size: 0.9em; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Repeater info grid */
+        .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-size: 0.82em; margin-top: 4px; }
+        .info-grid .label { color: var(--secondary-text-color); }
+        .info-grid .value { font-family: monospace; font-size: 0.95em; }
+
+        /* Client list */
+        .client-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 0.85em; }
+        .client-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .client-detail { color: var(--secondary-text-color); font-size: 0.9em; font-family: monospace; }
+        .client-iface { font-size: 0.8em; }
+
+        /* Radio pills */
+        .pill { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 0.78em; font-weight: 500; letter-spacing: 0.2px; line-height: 1.5; }
+        .pill-2g { background: rgba(33, 150, 243, 0.15); color: #1976d2; }
+        .pill-5g { background: rgba(156, 39, 176, 0.15); color: #7b1fa2; }
+        .pill-on { background: rgba(76, 175, 80, 0.15); color: var(--success-color, #4caf50); }
+        .pill-off { background: rgba(128,128,128,0.12); color: var(--disabled-text-color, #666); }
+
+        /* Radio row */
+        .radio-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 0.85em; }
+        .radio-ssid { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Service badges */
+        .service-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+
+        /* System stats bar */
+        .sys-bar { display: flex; align-items: center; gap: 16px; font-size: 0.82em; color: var(--secondary-text-color); padding: 8px 0 0; flex-wrap: wrap; }
+        .sys-stat { display: flex; align-items: center; gap: 4px; }
+        .sys-stat .val { color: var(--primary-text-color); font-weight: 500; }
+
+        /* Buttons */
+        .btn { border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 0.9em; font-family: inherit; transition: opacity 0.2s; }
         .btn:hover { opacity: 0.85; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary {
-          background: var(--primary-color);
-          color: var(--text-primary-color, #fff);
-        }
-        .btn-outline {
-          background: transparent;
-          border: 1px solid var(--divider-color);
-          color: var(--primary-text-color);
-        }
-        .btn-danger {
-          background: transparent;
-          border: 1px solid var(--error-color, #f44336);
-          color: var(--error-color, #f44336);
-        }
-        .btn-small {
-          padding: 4px 12px;
-          font-size: 0.8em;
-        }
-        .scan-results {
-          margin-bottom: 12px;
-        }
-        .scan-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 8px;
-        }
-        .scan-header h3 {
-          margin: 0;
-          font-size: 0.9em;
-          color: var(--secondary-text-color);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-        .band-filter {
-          display: flex;
-          gap: 4px;
-        }
-        .band-filter .btn-filter {
-          border: 1px solid var(--divider-color);
-          border-radius: 12px;
-          padding: 2px 10px;
-          cursor: pointer;
-          font-size: 0.75em;
-          font-family: inherit;
-          background: transparent;
-          color: var(--secondary-text-color);
-          transition: all 0.15s;
-        }
-        .band-filter .btn-filter:hover {
-          border-color: var(--primary-color);
-          color: var(--primary-color);
-        }
-        .band-filter .btn-filter.active {
-          background: var(--primary-color);
-          border-color: var(--primary-color);
-          color: var(--text-primary-color, #fff);
-        }
-        .network-list {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-        .network-item {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 6px 12px;
-          border-radius: 6px;
-          background: var(--primary-background-color);
-        }
-        .network-item.current {
-          border-left: 3px solid var(--primary-color);
-        }
-        .network-ssid {
-          font-size: 0.95em;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          min-width: 0;
-          flex: 1;
-        }
-        .network-detail {
-          font-size: 0.8em;
-          color: var(--secondary-text-color);
-          white-space: nowrap;
-          display: flex;
-          align-items: center;
-          gap: 5px;
-        }
-        .wifi-icon {
-          display: inline-flex;
-          align-items: flex-end;
-          gap: 2px;
-          height: 16px;
-          flex-shrink: 0;
-        }
-        .wifi-bar {
-          width: 3px;
-          border-radius: 1px;
-          background: var(--disabled-text-color, #555);
-          opacity: 0.25;
-        }
+        .btn-primary { background: var(--primary-color); color: var(--text-primary-color, #fff); }
+        .btn-outline { background: transparent; border: 1px solid var(--divider-color); color: var(--primary-text-color); }
+        .btn-danger { background: transparent; border: 1px solid var(--error-color, #f44336); color: var(--error-color, #f44336); }
+        .btn-small { padding: 4px 12px; font-size: 0.8em; }
+
+        /* Scan section */
+        .scan-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .band-filter { display: flex; gap: 4px; margin-left: auto; }
+        .band-filter .btn-filter { border: 1px solid var(--divider-color); border-radius: 12px; padding: 2px 10px; cursor: pointer; font-size: 0.72em; font-family: inherit; background: transparent; color: var(--secondary-text-color); transition: all 0.15s; }
+        .band-filter .btn-filter:hover { border-color: var(--primary-color); color: var(--primary-color); }
+        .band-filter .btn-filter.active { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
+        .network-list { display: flex; flex-direction: column; gap: 3px; }
+        .network-item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px; background: var(--card-background-color, var(--ha-card-background, #1c1c1c)); }
+        .network-item.current { border-left: 3px solid var(--primary-color); }
+        .network-ssid { font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+        .network-detail { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+
+        /* Wi-Fi signal bars */
+        .wifi-icon { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex-shrink: 0; }
+        .wifi-bar { width: 3px; border-radius: 1px; background: var(--disabled-text-color, #555); opacity: 0.25; }
         .wifi-bar.on { opacity: 1; }
-        .wifi-bar.b1 { height: 4px; }
-        .wifi-bar.b2 { height: 7px; }
-        .wifi-bar.b3 { height: 11px; }
-        .wifi-bar.b4 { height: 15px; }
+        .wifi-bar.b1 { height: 3px; } .wifi-bar.b2 { height: 6px; } .wifi-bar.b3 { height: 9px; } .wifi-bar.b4 { height: 13px; }
         .sig-4 .wifi-bar.on, .sig-3 .wifi-bar.on { background: var(--success-color, #4caf50); }
         .sig-2 .wifi-bar.on { background: var(--warning-color, #ff9800); }
         .sig-1 .wifi-bar.on { background: var(--error-color, #f44336); }
-        .band-pill {
-          display: inline-block;
-          padding: 1px 7px;
-          border-radius: 9px;
-          font-size: 0.85em;
-          font-weight: 500;
-          letter-spacing: 0.2px;
-          line-height: 1.4;
-        }
-        .band-2g {
-          background: rgba(33, 150, 243, 0.15);
-          color: #1976d2;
-        }
-        .band-5g {
-          background: rgba(156, 39, 176, 0.15);
-          color: #7b1fa2;
-        }
-        .manual-section {
-          border-top: 1px solid var(--divider-color);
-          padding-top: 8px;
-        }
-        .manual-toggle {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          cursor: pointer;
-          user-select: none;
-          padding: 4px 0;
-          font-size: 0.9em;
-          color: var(--primary-text-color);
-          background: none;
-          border: none;
-          font-family: inherit;
-          width: 100%;
-          text-align: left;
-        }
+
+        /* Manual connect */
+        .manual-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; padding: 4px 0; font-size: 0.88em; color: var(--primary-text-color); background: none; border: none; font-family: inherit; width: 100%; text-align: left; }
         .manual-toggle:hover { color: var(--primary-color); }
-        .manual-toggle .arrow {
-          font-size: 0.7em;
-          transition: transform 0.2s;
-        }
-        .manual-toggle .arrow.open {
-          transform: rotate(90deg);
-        }
-        .manual-form {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          padding: 12px 0 4px;
-        }
-        .manual-form input {
-          width: 100%;
-          padding: 8px 12px;
-          border: 1px solid var(--divider-color);
-          border-radius: 6px;
-          background: var(--primary-background-color);
-          color: var(--primary-text-color);
-          font-size: 0.9em;
-          font-family: inherit;
-          box-sizing: border-box;
-        }
-        .manual-form input:focus {
-          outline: none;
-          border-color: var(--primary-color);
-        }
-        .manual-form .form-row {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-        }
-        .manual-form label {
-          font-size: 0.8em;
-          color: var(--secondary-text-color);
-        }
-        .manual-form .form-actions {
-          display: flex;
-          justify-content: flex-end;
-          padding-top: 4px;
-        }
-        .info-grid {
-          display: grid;
-          grid-template-columns: auto 1fr;
-          gap: 2px 12px;
-          font-size: 0.82em;
-          margin-top: 6px;
-        }
-        .info-grid .label {
-          color: var(--secondary-text-color);
-        }
-        .info-grid .value {
-          font-family: monospace;
-          font-size: 0.95em;
-        }
-        .section-title {
-          font-size: 0.8em;
-          color: var(--secondary-text-color);
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          margin: 12px 0 6px;
-        }
-        .wan-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 4px 12px;
-          font-size: 0.85em;
-        }
-        .wan-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          flex-shrink: 0;
-        }
-        .wan-dot.online { background: var(--success-color, #4caf50); }
-        .wan-dot.up { background: var(--warning-color, #ff9800); }
-        .wan-dot.down { background: var(--disabled-text-color, #555); }
-        .wan-label {
-          color: var(--secondary-text-color);
-        }
-        .empty-state {
-          text-align: center;
-          padding: 16px;
-          color: var(--secondary-text-color);
-          font-size: 0.9em;
-        }
+        .manual-toggle .arrow { font-size: 0.7em; transition: transform 0.2s; }
+        .manual-toggle .arrow.open { transform: rotate(90deg); }
+        .manual-form { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 4px; }
+        .manual-form input { width: 100%; padding: 8px 12px; border: 1px solid var(--divider-color); border-radius: 6px; background: var(--primary-background-color); color: var(--primary-text-color); font-size: 0.9em; font-family: inherit; box-sizing: border-box; }
+        .manual-form input:focus { outline: none; border-color: var(--primary-color); }
+        .manual-form label { font-size: 0.8em; color: var(--secondary-text-color); }
+        .manual-form .form-row { display: flex; flex-direction: column; gap: 4px; }
+        .manual-form .form-actions { display: flex; justify-content: flex-end; padding-top: 4px; }
+        .empty-state { text-align: center; padding: 12px; color: var(--secondary-text-color); font-size: 0.85em; }
       </style>
       <ha-card>
-        <div class="header">
-          <h2>GL.iNet Repeater</h2>
-        </div>
-
-        <div class="status">
-          <div class="status-left">
-            ${isConnected
-              ? `<span class="connected-badge">Connected</span>
-                 <span class="ssid-name">${this._esc(connectedSsid)}</span>
-                 ${signalDbm ? `<span class="signal-info">${signalDbm}</span>` : ""}
-                 ${Object.keys(repeaterInfo).length > 0 ? `
-                   <div class="info-grid">
-                     ${repeaterInfo.ip_address ? `<span class="label">IP</span><span class="value">${this._esc(repeaterInfo.ip_address)}</span>` : ''}
-                     ${repeaterInfo.macaddr ? `<span class="label">MAC</span><span class="value">${this._esc(repeaterInfo.macaddr)}</span>` : ''}
-                     ${repeaterInfo.gateway ? `<span class="label">Gateway</span><span class="value">${this._esc(repeaterInfo.gateway)}</span>` : ''}
-                     ${repeaterInfo.connected ? `<span class="label">Uptime</span><span class="value">${this._esc(repeaterInfo.connected)}</span>` : ''}
-                     ${repeaterInfo.channel ? `<span class="label">Channel</span><span class="value">${repeaterInfo.channel}</span>` : ''}
-                   </div>
-                 ` : ''}`
-              : `<span class="disconnected-badge">Disconnected</span>
-                 <span class="ssid-name">No network</span>`
-            }
+        <!-- WAN Sources + Repeater Status -->
+        <div class="grid">
+          <div class="card-section">
+            <div class="section-label">WAN Sources</div>
+            ${wan ? `<div class="wan-row">${this._dot(wan.online, wan.up)}<span class="wan-label">Ethernet</span><span class="wan-detail">${wan.online ? 'online' : wan.up ? 'up' : 'disconnected'}</span></div>` : ''}
+            ${secondwan ? `<div class="wan-row">${this._dot(secondwan.online, secondwan.up)}<span class="wan-label">Ethernet 2</span><span class="wan-detail">${secondwan.online ? 'online' : secondwan.up ? 'up' : 'disconnected'}</span></div>` : ''}
+            <div class="wan-row">${this._dot(wwan?.online, wwan?.up)}<span class="wan-label">Repeater</span><span class="wan-detail">${isConnected ? this._esc(connectedSsid) : 'disconnected'}</span></div>
+            ${tethering ? `<div class="wan-row">${this._dot(tethering.online, tethering.up)}<span class="wan-label">Tethering</span><span class="wan-detail">${tethering.online ? 'online' : tethering.up ? 'up' : 'disconnected'}</span></div>` : ''}
+            ${modem0 ? `<div class="wan-row">${this._dot(modem0.online, modem0.up)}<span class="wan-label">Cellular</span><span class="wan-detail">${modem.apn ? this._esc(modem.apn) : modem0.online ? 'online' : 'disconnected'}${modem.model ? ' &middot; ' + this._esc(modem.model.split('_')[0]) : ''}</span></div>` : ''}
           </div>
-          ${isConnected && c.disconnect_button
-            ? `<button class="btn btn-danger btn-small" id="btn-disconnect">Disconnect</button>`
-            : ""
-          }
+
+          <div class="card-section">
+            <div class="section-label">Connected Clients</div>
+            ${wlanClients.length > 0 ? wlanClients.map(cl => `
+              <div class="client-row">
+                ${this._dot(true, false)}
+                <span class="client-name">${this._esc(cl.name || 'Unknown')}</span>
+                <span class="pill ${cl.iface === '5G' ? 'pill-5g' : 'pill-2g'}">${this._esc(cl.iface || '?')}</span>
+                <span class="client-detail">${this._esc(cl.ip || '')}</span>
+              </div>
+            `).join('') : ''}
+            ${lanClients.length > 0 ? lanClients.map(cl => `
+              <div class="client-row">
+                ${this._dot(true, false)}
+                <span class="client-name">${this._esc(cl.name || 'Unknown')}</span>
+                <span class="pill pill-on">LAN</span>
+                <span class="client-detail">${this._esc(cl.ip || '')}</span>
+              </div>
+            `).join('') : ''}
+            ${onlineClients.length === 0 ? '<div class="empty-state">No clients connected</div>' : ''}
+          </div>
         </div>
 
-        ${lanIp || wanInterfaces.some(i => i.up) ? `
-          <div class="section-title">Interfaces</div>
-          ${lanIp ? `<div class="wan-row"><span class="wan-dot online"></span><span>LAN</span><span class="wan-label">${this._esc(lanIp)}</span></div>` : ''}
-          ${wanInterfaces.filter(i => i.interface !== 'wwan' && i.interface !== 'wwan6').map(i => {
-            const dotCls = i.online ? 'online' : i.up ? 'up' : 'down';
-            const label = i.online ? 'online' : i.up ? 'up' : 'down';
-            return i.up || i.online ? `<div class="wan-row"><span class="wan-dot ${dotCls}"></span><span>${this._esc(i.interface)}</span><span class="wan-label">${label}</span></div>` : '';
-          }).join('')}
+        <!-- Repeater Connection Details (when connected) -->
+        ${isConnected ? `
+        <div class="card-section" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="display:flex;align-items:center;gap:8px">
+                ${this._signalBars(signalDbm)}
+                <span style="font-weight:500">${this._esc(connectedSsid)}</span>
+                <span style="font-size:0.82em;color:var(--secondary-text-color)">${signalDbm != null ? signalDbm + ' dBm' : ''}</span>
+              </div>
+              <div class="info-grid" style="margin-top:6px">
+                ${ri.ip_address ? `<span class="label">IP</span><span class="value">${this._esc(ri.ip_address)}</span>` : ''}
+                ${ri.macaddr ? `<span class="label">MAC</span><span class="value">${this._esc(ri.macaddr)}</span>` : ''}
+                ${ri.gateway ? `<span class="label">Gateway</span><span class="value">${this._esc(ri.gateway)}</span>` : ''}
+                ${ri.connected ? `<span class="label">Connected</span><span class="value">${this._esc(ri.connected)}</span>` : ''}
+                ${ri.channel ? `<span class="label">Channel</span><span class="value">${ri.channel}</span>` : ''}
+                ${ri.bssid ? `<span class="label">BSSID</span><span class="value">${this._esc(ri.bssid)}</span>` : ''}
+              </div>
+            </div>
+            ${c.disconnect_button ? `<button class="btn btn-danger btn-small" id="btn-disconnect">Disconnect</button>` : ''}
+          </div>
+        </div>
         ` : ''}
 
-        <div class="actions">
-          <button class="btn btn-primary" id="btn-scan" ${this._scanning ? "disabled" : ""}>
-            ${this._scanning ? "Scanning\u2026" : "Scan Wi-Fi"}
-          </button>
+        <!-- Wi-Fi Radios + Services -->
+        <div class="grid">
+          <div class="card-section">
+            <div class="section-label">Wi-Fi Radios</div>
+            ${mainRadios.map(r => `
+              <div class="radio-row">
+                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
+                <span class="radio-ssid">${this._esc(r.ssid)}</span>
+                ${r.hidden ? '<span style="font-size:0.75em;color:var(--secondary-text-color)">hidden</span>' : ''}
+              </div>
+            `).join('')}
+            ${guestRadios.map(r => `
+              <div class="radio-row">
+                <span class="pill ${r.band === '2G' ? 'pill-2g' : 'pill-5g'}">${this._esc(r.band)}</span>
+                <span class="radio-ssid">${this._esc(r.ssid)}</span>
+                <span style="font-size:0.75em;color:var(--secondary-text-color)">guest</span>
+              </div>
+            `).join('')}
+            ${mainRadios.length === 0 && guestRadios.length === 0 ? '<div class="empty-state">No radios active</div>' : ''}
+          </div>
+
+          <div class="card-section">
+            <div class="section-label">Services</div>
+            <div class="service-badges">
+              ${vpn.map(s => `<span class="pill ${s.active ? 'pill-on' : 'pill-off'}">${this._esc(s.name)}</span>`).join('')}
+            </div>
+            ${modem.model ? `
+              <div class="section-label" style="margin-top:10px">Cellular</div>
+              <div class="info-grid">
+                ${modem.apn ? `<span class="label">APN</span><span class="value">${this._esc(modem.apn)}</span>` : ''}
+                ${modem.traffic_bytes ? `<span class="label">Traffic</span><span class="value">${this._formatBytes(modem.traffic_bytes)}</span>` : ''}
+                ${modem.sms_unread ? `<span class="label">SMS</span><span class="value">${modem.sms_unread} unread</span>` : ''}
+                ${modem.imei ? `<span class="label">IMEI</span><span class="value">${this._esc(modem.imei)}</span>` : ''}
+              </div>
+            ` : ''}
+          </div>
         </div>
 
-        ${scanResults.length > 0 ? `
-          <div class="scan-results">
-            <div class="scan-header">
-              <h3>Available Networks</h3>
+        <!-- System stats bar -->
+        <div class="sys-bar">
+          ${sys.cpu_temp != null ? `<span class="sys-stat">CPU <span class="val">${sys.cpu_temp}&deg;C</span></span>` : ''}
+          ${sys.battery_percent != null ? `<span class="sys-stat">${sys.battery_charging ? '&#9889;' : '&#128267;'} <span class="val">${sys.battery_percent}%</span></span>` : ''}
+          ${sys.memory_total ? `<span class="sys-stat">RAM <span class="val">${this._formatBytes(sys.memory_free)}</span> free</span>` : ''}
+          ${sys.uptime ? `<span class="sys-stat">Up <span class="val">${this._formatUptime(sys.uptime)}</span></span>` : ''}
+          ${sys.lan_ip ? `<span class="sys-stat">LAN <span class="val">${this._esc(sys.lan_ip)}</span></span>` : ''}
+        </div>
+
+        <!-- Scan / Network Picker -->
+        <div style="margin-top:14px">
+          <div class="scan-toggle">
+            <button class="btn btn-primary btn-small" id="btn-scan" ${this._scanning ? "disabled" : ""}>
+              ${this._scanning ? "Scanning\u2026" : "Scan Wi-Fi"}
+            </button>
+            ${scanResults.length > 0 ? `
+              <button class="btn btn-outline btn-small" id="btn-toggle-scan">${this._scanOpen ? 'Hide' : 'Show'} ${scanResults.length} networks</button>
               <div class="band-filter">
                 <button class="btn-filter ${bf === null ? 'active' : ''}" data-band="all">All</button>
-                <button class="btn-filter ${bf === '2g' ? 'active' : ''}" data-band="2g">2.4 GHz</button>
-                <button class="btn-filter ${bf === '5g' ? 'active' : ''}" data-band="5g">5 GHz</button>
+                <button class="btn-filter ${bf === '2g' ? 'active' : ''}" data-band="2g">2.4G</button>
+                <button class="btn-filter ${bf === '5g' ? 'active' : ''}" data-band="5g">5G</button>
               </div>
-            </div>
-            <div class="network-list">
-              ${filteredResults
-                .map(net => `
-                  <div class="network-item ${net.ssid === connectedSsid ? 'current' : ''}">
-                    ${signalIcon(net.signal)}
-                    <span class="network-ssid">${this._esc(net.ssid)}</span>
-                    <span class="network-detail">
-                      ${this._bandPills(net.band)}
-                      ${net.encryption ? '<span>' + this._esc(net.encryption) + '</span>' : ''}
-                      ${net.signal != null ? '<span>' + net.signal + ' dBm</span>' : ''}
-                    </span>
-                    ${net.ssid !== connectedSsid
-                      ? `<button class="btn btn-outline btn-small btn-join" data-ssid="${this._esc(net.ssid)}"
-                           ${this._connecting ? 'disabled' : ''}>Join</button>`
-                      : '<span class="network-detail">current</span>'
-                    }
-                  </div>
-                `).join("")}
-            </div>
+            ` : ''}
           </div>
-        ` : (c.network_select ? `
-          <div class="empty-state">Press Scan to discover nearby networks</div>
-        ` : "")}
-
-        <div class="manual-section">
-          <button class="manual-toggle" id="btn-manual-toggle">
-            <span class="arrow ${this._manualOpen ? 'open' : ''}">&#9654;</span>
-            Manual Connect
-          </button>
-
-          ${this._manualOpen ? `
-            <div class="manual-form">
-              <div class="form-row">
-                <label for="manual-ssid">SSID</label>
-                <input type="text" id="manual-ssid" placeholder="Network name"
-                       value="${this._esc(this._manualSsid)}">
-              </div>
-              <div class="form-row">
-                <label for="manual-key">Password</label>
-                <input type="password" id="manual-key" placeholder="Leave empty for open networks"
-                       value="${this._esc(this._manualKey)}">
-              </div>
-              <div class="form-actions">
-                <button class="btn btn-primary" id="btn-manual-connect"
-                        ${this._connecting ? 'disabled' : ''}>
-                  ${this._connecting ? 'Connecting\u2026' : 'Connect'}
-                </button>
-              </div>
+          ${this._scanOpen && scanResults.length > 0 ? `
+            <div class="network-list">
+              ${filteredResults.map(net => `
+                <div class="network-item ${net.ssid === connectedSsid ? 'current' : ''}">
+                  ${this._signalBars(net.signal)}
+                  <span class="network-ssid">${this._esc(net.ssid)}</span>
+                  <span class="network-detail">
+                    ${this._bandPills(net.band)}
+                    ${net.encryption ? '<span>' + this._esc(net.encryption) + '</span>' : ''}
+                    ${net.signal != null ? '<span>' + net.signal + ' dBm</span>' : ''}
+                  </span>
+                  ${net.ssid !== connectedSsid
+                    ? `<button class="btn btn-outline btn-small btn-join" data-ssid="${this._esc(net.ssid)}" ${this._connecting ? 'disabled' : ''}>Join</button>`
+                    : '<span class="network-detail">current</span>'}
+                </div>
+              `).join("")}
             </div>
-          ` : ""}
+          ` : ''}
+
+          <div style="border-top:1px solid var(--divider-color);margin-top:8px;padding-top:6px">
+            <button class="manual-toggle" id="btn-manual-toggle">
+              <span class="arrow ${this._manualOpen ? 'open' : ''}">&#9654;</span> Manual Connect
+            </button>
+            ${this._manualOpen ? `
+              <div class="manual-form">
+                <div class="form-row"><label>SSID</label><input type="text" id="manual-ssid" placeholder="Network name" value="${this._esc(this._manualSsid)}"></div>
+                <div class="form-row"><label>Password</label><input type="password" id="manual-key" placeholder="Leave empty for open networks" value="${this._esc(this._manualKey)}"></div>
+                <div class="form-actions"><button class="btn btn-primary btn-small" id="btn-manual-connect" ${this._connecting ? 'disabled' : ''}>${this._connecting ? 'Connecting\u2026' : 'Connect'}</button></div>
+              </div>
+            ` : ''}
+          </div>
         </div>
       </ha-card>
     `;
 
-    // --- Bind event listeners ---
+    // --- Bind events ---
+    this.shadowRoot.getElementById("btn-scan")?.addEventListener("click", () => this._pressScan());
+    this.shadowRoot.getElementById("btn-disconnect")?.addEventListener("click", () => this._pressDisconnect());
+    this.shadowRoot.getElementById("btn-manual-toggle")?.addEventListener("click", () => this._toggleManual());
+    this.shadowRoot.getElementById("btn-toggle-scan")?.addEventListener("click", () => this._toggleScan());
+    this.shadowRoot.querySelectorAll(".btn-filter").forEach(btn => btn.addEventListener("click", () => this._setBandFilter(btn.dataset.band === "all" ? null : btn.dataset.band)));
 
-    const btnScan = this.shadowRoot.getElementById("btn-scan");
-    if (btnScan) btnScan.addEventListener("click", () => this._pressScan());
-
-    const btnDisconnect = this.shadowRoot.getElementById("btn-disconnect");
-    if (btnDisconnect) btnDisconnect.addEventListener("click", () => this._pressDisconnect());
-
-    const btnManualToggle = this.shadowRoot.getElementById("btn-manual-toggle");
-    if (btnManualToggle) btnManualToggle.addEventListener("click", () => this._toggleManual());
-
-    // Band filter buttons
-    this.shadowRoot.querySelectorAll(".btn-filter").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const band = btn.dataset.band;
-        this._setBandFilter(band === "all" ? null : band);
-      });
-    });
-
-    // Manual form inputs
     const ssidInput = this.shadowRoot.getElementById("manual-ssid");
-    if (ssidInput) {
-      ssidInput.addEventListener("input", (e) => { this._manualSsid = e.target.value; });
-      ssidInput.focus();
-    }
-
+    if (ssidInput) { ssidInput.addEventListener("input", e => { this._manualSsid = e.target.value; }); }
     const keyInput = this.shadowRoot.getElementById("manual-key");
-    if (keyInput) {
-      keyInput.addEventListener("input", (e) => { this._manualKey = e.target.value; });
-    }
-
-    // Manual connect button
-    const btnManualConnect = this.shadowRoot.getElementById("btn-manual-connect");
-    if (btnManualConnect) {
-      btnManualConnect.addEventListener("click", () => {
-        if (this._manualSsid.trim()) {
-          this._connectTo(this._manualSsid.trim(), this._manualKey);
-        }
-      });
-    }
-
-    // Join buttons in scan results
-    this.shadowRoot.querySelectorAll(".btn-join").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        this._joinScanned(btn.dataset.ssid);
-      });
+    if (keyInput) { keyInput.addEventListener("input", e => { this._manualKey = e.target.value; }); }
+    this.shadowRoot.getElementById("btn-manual-connect")?.addEventListener("click", () => {
+      if (this._manualSsid.trim()) this._connectTo(this._manualSsid.trim(), this._manualKey);
     });
+    this.shadowRoot.querySelectorAll(".btn-join").forEach(btn => btn.addEventListener("click", () => this._joinScanned(btn.dataset.ssid)));
   }
 
   _esc(str) {
@@ -655,6 +461,6 @@ if (!customElements.get("glinet-repeater-card")) {
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "glinet-repeater-card",
-  name: "GL.iNet Repeater",
-  description: "Control your GL.iNet router's Wi-Fi repeater connection",
+  name: "GL.iNet Network Overview",
+  description: "Full network dashboard for GL.iNet routers",
 });
