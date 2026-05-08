@@ -47,9 +47,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     # Register the Lovelace card JS (once)
-    if CARD_URL not in hass.data.get("frontend_extra_module_url", set()):
+    if not hass.data.get(f"{DOMAIN}_card_registered"):
         hass.http.register_static_path(CARD_URL, str(CARD_PATH), cache_headers=False)
         add_extra_js_url(hass, CARD_URL)
+        hass.data[f"{DOMAIN}_card_registered"] = True
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
