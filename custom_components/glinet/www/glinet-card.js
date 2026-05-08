@@ -256,12 +256,13 @@ class GlinetRepeaterCard extends HTMLElement {
         .band-filter .btn-filter:hover { border-color: var(--primary-color); color: var(--primary-color); }
         .band-filter .btn-filter.active { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
         .network-list { display: flex; flex-direction: column; gap: 3px; }
-        .network-item { display: grid; grid-template-columns: auto 1fr auto auto auto auto; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px; background: var(--card-background-color, var(--ha-card-background, #1c1c1c)); }
+        .network-item { display: grid; grid-template-columns: auto 1fr 120px 36px 60px 62px; align-items: center; gap: 0 8px; padding: 5px 10px; border-radius: 6px; background: var(--card-background-color, var(--ha-card-background, #1c1c1c)); }
         .network-item.current { background: rgba(var(--rgb-primary-color, 33, 150, 243), 0.08); }
         .network-ssid { font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-        .network-bands { white-space: nowrap; display: flex; gap: 3px; }
+        .network-bands { white-space: nowrap; display: flex; gap: 3px; justify-content: flex-end; }
         .network-enc { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; text-align: right; }
         .network-dbm { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; text-align: right; font-family: monospace; }
+        .network-item .btn { min-width: 62px; text-align: center; box-sizing: border-box; }
         .network-detail { font-size: 0.78em; color: var(--secondary-text-color); white-space: nowrap; display: flex; align-items: center; gap: 4px; }
 
         /* Wi-Fi signal bars */
