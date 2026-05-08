@@ -162,13 +162,20 @@ class GlinetRepeaterCard extends HTMLElement {
       .filter(net => this._matchesBandFilter(net.band))
       .sort((a, b) => (b.signal || -100) - (a.signal || -100));
 
-    // Signal icon helper
+    // Signal icon helper — CSS-based Wi-Fi bars (4 arcs)
     const signalIcon = (dbm) => {
-      if (dbm == null) return "\u25CB"; // empty circle
-      if (dbm >= -50) return "\u2588\u2588\u2588\u2588"; // full
-      if (dbm >= -60) return "\u2588\u2588\u2588\u2591";
-      if (dbm >= -70) return "\u2588\u2588\u2591\u2591";
-      return "\u2588\u2591\u2591\u2591";
+      let level, cls;
+      if (dbm == null) { level = 0; cls = "sig-none"; }
+      else if (dbm >= -50) { level = 4; cls = "sig-4"; }
+      else if (dbm >= -60) { level = 3; cls = "sig-3"; }
+      else if (dbm >= -70) { level = 2; cls = "sig-2"; }
+      else { level = 1; cls = "sig-1"; }
+      return `<span class="wifi-icon ${cls}" title="${dbm != null ? dbm + ' dBm' : 'unknown'}">` +
+        `<span class="wifi-bar b1 ${level >= 1 ? 'on' : ''}"></span>` +
+        `<span class="wifi-bar b2 ${level >= 2 ? 'on' : ''}"></span>` +
+        `<span class="wifi-bar b3 ${level >= 3 ? 'on' : ''}"></span>` +
+        `<span class="wifi-bar b4 ${level >= 4 ? 'on' : ''}"></span>` +
+        `</span>`;
     };
 
     const bf = this._bandFilter;
@@ -182,15 +189,7 @@ class GlinetRepeaterCard extends HTMLElement {
           padding: 16px;
         }
         .header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 12px;
-        }
-        .header h2 {
-          margin: 0;
-          font-size: 1.1em;
-          font-weight: 500;
+          display: none;
         }
         .status {
           display: flex;
@@ -308,35 +307,51 @@ class GlinetRepeaterCard extends HTMLElement {
         .network-item {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          padding: 8px 12px;
+          gap: 8px;
+          padding: 6px 12px;
           border-radius: 6px;
           background: var(--primary-background-color);
         }
         .network-item.current {
           border-left: 3px solid var(--primary-color);
         }
-        .network-info {
-          display: flex;
-          flex-direction: column;
-          gap: 1px;
-          min-width: 0;
-          flex: 1;
-        }
         .network-ssid {
           font-size: 0.95em;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          min-width: 0;
+          flex: 1;
         }
-        .network-meta {
-          font-size: 0.75em;
+        .network-detail {
+          font-size: 0.8em;
           color: var(--secondary-text-color);
+          white-space: nowrap;
           display: flex;
           align-items: center;
-          gap: 4px;
-          flex-wrap: wrap;
+          gap: 5px;
         }
+        .wifi-icon {
+          display: inline-flex;
+          align-items: flex-end;
+          gap: 2px;
+          height: 16px;
+          flex-shrink: 0;
+        }
+        .wifi-bar {
+          width: 3px;
+          border-radius: 1px;
+          background: var(--disabled-text-color, #555);
+          opacity: 0.25;
+        }
+        .wifi-bar.on { opacity: 1; }
+        .wifi-bar.b1 { height: 4px; }
+        .wifi-bar.b2 { height: 7px; }
+        .wifi-bar.b3 { height: 11px; }
+        .wifi-bar.b4 { height: 15px; }
+        .sig-4 .wifi-bar.on, .sig-3 .wifi-bar.on { background: var(--success-color, #4caf50); }
+        .sig-2 .wifi-bar.on { background: var(--warning-color, #ff9800); }
+        .sig-1 .wifi-bar.on { background: var(--error-color, #f44336); }
         .band-pill {
           display: inline-block;
           padding: 1px 7px;
@@ -464,18 +479,17 @@ class GlinetRepeaterCard extends HTMLElement {
               ${filteredResults
                 .map(net => `
                   <div class="network-item ${net.ssid === connectedSsid ? 'current' : ''}">
-                    <div class="network-info">
-                      <span class="network-ssid">${this._esc(net.ssid)}</span>
-                      <span class="network-meta">
-                        <span>${signalIcon(net.signal)} ${net.signal != null ? net.signal + ' dBm' : ''}</span>
-                        ${this._bandPills(net.band) || '<span>?</span>'}
-                        ${net.encryption ? '<span>' + this._esc(net.encryption) + '</span>' : ''}
-                      </span>
-                    </div>
+                    ${signalIcon(net.signal)}
+                    <span class="network-ssid">${this._esc(net.ssid)}</span>
+                    <span class="network-detail">
+                      ${this._bandPills(net.band)}
+                      ${net.encryption ? '<span>' + this._esc(net.encryption) + '</span>' : ''}
+                      ${net.signal != null ? '<span>' + net.signal + ' dBm</span>' : ''}
+                    </span>
                     ${net.ssid !== connectedSsid
                       ? `<button class="btn btn-outline btn-small btn-join" data-ssid="${this._esc(net.ssid)}"
                            ${this._connecting ? 'disabled' : ''}>Join</button>`
-                      : '<span class="network-meta">current</span>'
+                      : '<span class="network-detail">current</span>'
                     }
                   </div>
                 `).join("")}
