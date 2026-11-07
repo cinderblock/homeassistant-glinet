@@ -27,3 +27,8 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # Repo-level items for the owner to decide, not code fixes:
+          # brands  - needs brand assets (icon) for the integration
+          # license - no LICENSE file chosen yet
+          # topics  - no GitHub repository topics set
+          ignore: brands license topics
