@@ -1,10 +1,12 @@
 {
   "domain": "glinet",
   "name": "GL.iNet Router",
-  "codeowners": [],
+  "codeowners": ["@cinderblock"],
   "config_flow": true,
-  "documentation": "https://github.com/camerontacklind/homeassistant-glinet",
+  "dependencies": ["frontend", "http"],
+  "documentation": "https://github.com/cinderblock/homeassistant-glinet",
   "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/cinderblock/homeassistant-glinet/issues",
   "requirements": ["passlib>=1.7.4"],
   "version": "0.1.0"
 }
